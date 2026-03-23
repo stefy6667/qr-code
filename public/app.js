@@ -99,7 +99,15 @@ async function renderAdmin() {
               <p class="small">URL scanare: <a href="${item.scanUrl}" target="_blank">${item.scanUrl}</a></p>
               <p class="small">Cod editare client: <span class="code">${item.editCode}</span></p>
               <p class="small">Status: ${item.content ? 'configurat' : 'neconfigurat'}</p>
+              <p class="small">Google Reviews: ${item.googleReviews?.enabled ? 'activat' : 'dezactivat'}</p>
               ${item.content ? html`<p class="small">Titlu publicat: ${item.content.headline || 'fără titlu'}</p>` : ''}
+              <form class="admin-settings-form" data-slug="${item.slug}">
+                <label>Titlu intern<input name="title" value="${escapeHtml(item.title)}" /></label>
+                <label class="inline-toggle"><input type="checkbox" name="reviewsEnabled" ${item.googleReviews?.enabled ? 'checked' : ''} /> Activează Google Reviews pentru acest QR</label>
+                <label>Google Embed URL<input name="reviewEmbedUrl" value="${escapeHtml(item.googleReviews?.embedUrl || '')}" placeholder="https://www.google.com/maps/embed?..." /></label>
+                <label>Text buton recenzii<input name="reviewButtonLabel" value="${escapeHtml(item.googleReviews?.buttonLabel || 'Recenzii Google')}" /></label>
+                <div class="actions"><button type="submit" class="secondary">Salvează setările</button></div>
+              </form>
             </div>
           </article>
         `).join('') || '<div class="card">Nu există încă niciun cod.</div>'}
@@ -116,6 +124,28 @@ async function renderAdmin() {
     await api('/api/logout', { method: 'POST' });
     route();
   };
+  document.querySelectorAll('.admin-settings-form').forEach((form) => {
+    form.onsubmit = async (event) => {
+      event.preventDefault();
+      const formData = new FormData(form);
+      try {
+        await api(`/api/admin/qr/${form.dataset.slug}/settings`, {
+          method: 'POST',
+          body: JSON.stringify({
+            title: formData.get('title'),
+            googleReviews: {
+              enabled: formData.get('reviewsEnabled') === 'on',
+              embedUrl: formData.get('reviewEmbedUrl'),
+              buttonLabel: formData.get('reviewButtonLabel'),
+            }
+          })
+        });
+        route();
+      } catch (error) {
+        alert(error.message);
+      }
+    };
+  });
 }
 
 function renderLogin() {
@@ -211,21 +241,35 @@ function getDefaultContent(data) {
   };
 }
 
+function mediaAlignStyle(textAlign) {
+  if (textAlign === 'center') return 'display:block;margin-left:auto;margin-right:auto;';
+  if (textAlign === 'right') return 'display:block;margin-left:auto;margin-right:0;';
+  return 'display:block;margin-left:0;margin-right:auto;';
+}
+
 function previewMarkup(content, label = 'Previzualizare live', options = {}) {
-  const { showButton = true, usePlaceholders = true, showLabel = true } = options;
+  const { showButton = true, usePlaceholders = true, showLabel = true, googleReviews = null } = options;
   const headline = String(content.headline || '').trim();
   const body = String(content.body || '').trim();
   const buttonLabel = String(content.buttonLabel || '').trim();
   const hasImage = Boolean(content.imageUrl);
   const hasVideo = Boolean(content.videoUrl);
+  const mediaStyle = mediaAlignStyle(content.theme.textAlign);
+  const reviewsEnabled = Boolean(googleReviews?.enabled && googleReviews?.embedUrl);
 
   return html`
     ${showLabel ? `<span class="badge" style="background:${content.theme.accent}22;color:${content.theme.accent};border-color:${content.theme.accent}66">${label}</span>` : ''}
     ${headline ? `<h2>${escapeHtml(headline)}</h2>` : (usePlaceholders ? '<h2>Titlul tău apare aici</h2>' : '')}
     ${body ? `<p>${escapeHtml(body)}</p>` : (usePlaceholders ? '<p>Aici va apărea descrierea, oferta sau mesajul personalizat.</p>' : '')}
-    ${hasImage ? `<img src="${escapeAttribute(content.imageUrl)}" alt="vizual" />` : ''}
-    ${hasVideo ? `<video src="${escapeAttribute(content.videoUrl)}" controls></video>` : ''}
+    ${hasImage ? `<img src="${escapeAttribute(content.imageUrl)}" alt="vizual" style="${mediaStyle}" />` : ''}
+    ${hasVideo ? `<video src="${escapeAttribute(content.videoUrl)}" controls style="${mediaStyle}"></video>` : ''}
     ${showButton && buttonLabel ? `<button type="button" style="width:max-content;background:linear-gradient(135deg, ${content.theme.accent}, #2563eb)">${escapeHtml(buttonLabel)}</button>` : ''}
+    ${reviewsEnabled ? html`
+      <div class="google-reviews-block">
+        <div class="google-reviews-header">${escapeHtml(googleReviews.buttonLabel || 'Recenzii Google')}</div>
+        <iframe src="${escapeAttribute(googleReviews.embedUrl)}" loading="lazy" referrerpolicy="no-referrer-when-downgrade" allowfullscreen></iframe>
+      </div>
+    ` : ''}
   `;
 }
 
@@ -247,7 +291,7 @@ function renderPublicView(slug, data) {
   preview.style.color = saved.theme.foreground;
   preview.style.fontFamily = saved.theme.fontFamily;
   preview.style.textAlign = saved.theme.textAlign;
-  preview.innerHTML = previewMarkup(saved, '', { showButton: false, usePlaceholders: false, showLabel: false });
+  preview.innerHTML = previewMarkup(saved, '', { showButton: false, usePlaceholders: false, showLabel: false, googleReviews: data.googleReviews });
 
   document.getElementById('editAccessBtn').onclick = () => requestEditAccess(slug);
 }

@@ -128,3 +128,33 @@ button.danger { background: linear-gradient(135deg, var(--danger), #be123c); }
 .public-preview .preview-inner {
   min-height: 540px;
 }
+
+.admin-settings-form {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
+}
+.inline-toggle {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 12px;
+}
+.inline-toggle input {
+  width: 18px;
+  height: 18px;
+}
+.google-reviews-block {
+  display: grid;
+  gap: 12px;
+  margin-top: 8px;
+}
+.google-reviews-header {
+  font-weight: 700;
+}
+.google-reviews-block iframe {
+  width: min(100%, 720px);
+  min-height: 420px;
+  border: 0;
+  border-radius: 24px;
+  background: rgba(255,255,255,0.92);
+}

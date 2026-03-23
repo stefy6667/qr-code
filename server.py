@@ -48,10 +48,20 @@ def init_db():
             title TEXT NOT NULL,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            content_json TEXT
+            content_json TEXT,
+            reviews_enabled INTEGER NOT NULL DEFAULT 0,
+            review_embed_url TEXT,
+            review_button_label TEXT
         );
         '''
     )
+    columns = {row['name'] for row in conn.execute("PRAGMA table_info(qr_codes)").fetchall()}
+    if 'reviews_enabled' not in columns:
+        conn.execute("ALTER TABLE qr_codes ADD COLUMN reviews_enabled INTEGER NOT NULL DEFAULT 0")
+    if 'review_embed_url' not in columns:
+        conn.execute("ALTER TABLE qr_codes ADD COLUMN review_embed_url TEXT")
+    if 'review_button_label' not in columns:
+        conn.execute("ALTER TABLE qr_codes ADD COLUMN review_button_label TEXT")
     conn.commit()
     conn.close()
 
@@ -149,6 +159,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.handle_logout()
         if path == '/api/admin/qr-codes':
             return self.handle_admin_create()
+        if path.startswith('/api/admin/qr/') and path.endswith('/settings'):
+            slug = path.split('/')[-2]
+            return self.handle_admin_settings(slug)
         if path.startswith('/api/public/qr/') and path.endswith('/verify-edit-code'):
             slug = path.split('/')[-2]
             return self.handle_public_verify(slug)
@@ -240,6 +253,11 @@ class Handler(BaseHTTPRequestHandler):
                 'createdAt': row['created_at'],
                 'updatedAt': row['updated_at'],
                 'content': content,
+                'googleReviews': {
+                    'enabled': bool(row['reviews_enabled']),
+                    'embedUrl': row['review_embed_url'] or '',
+                    'buttonLabel': row['review_button_label'] or 'Recenzii Google',
+                },
                 'scanUrl': f'{BASE_URL}/c/{row["slug"]}',
                 'qrImageUrl': f'https://api.qrserver.com/v1/create-qr-code/?size=1200x1200&data={quote(f"{BASE_URL}/c/{row["slug"]}", safe="")}',
             })
@@ -258,6 +276,33 @@ class Handler(BaseHTTPRequestHandler):
         conn.close()
         json_response(self, {'ok': True, 'slug': slug, 'editCode': edit_code})
 
+    def handle_admin_settings(self, slug):
+        if not self.require_admin():
+            return
+        body = parse_body(self)
+        conn = db()
+        row = conn.execute('SELECT slug FROM qr_codes WHERE slug = ?', (slug,)).fetchone()
+        if not row:
+            conn.close()
+            return json_response(self, {'error': 'Codul QR nu există.'}, 404)
+        reviews_enabled = 1 if body.get('googleReviews', {}).get('enabled') else 0
+        review_embed_url = (body.get('googleReviews', {}).get('embedUrl') or '').strip()
+        review_button_label = (body.get('googleReviews', {}).get('buttonLabel') or 'Recenzii Google').strip()
+        title = (body.get('title') or '').strip()
+        if title:
+            conn.execute(
+                'UPDATE qr_codes SET title = ?, reviews_enabled = ?, review_embed_url = ?, review_button_label = ?, updated_at = CURRENT_TIMESTAMP WHERE slug = ?',
+                (title, reviews_enabled, review_embed_url, review_button_label, slug),
+            )
+        else:
+            conn.execute(
+                'UPDATE qr_codes SET reviews_enabled = ?, review_embed_url = ?, review_button_label = ?, updated_at = CURRENT_TIMESTAMP WHERE slug = ?',
+                (reviews_enabled, review_embed_url, review_button_label, slug),
+            )
+        conn.commit()
+        conn.close()
+        return json_response(self, {'ok': True})
+
     def handle_public_qr(self, slug):
         conn = db()
         row = conn.execute('SELECT * FROM qr_codes WHERE slug = ?', (slug,)).fetchone()
@@ -271,6 +316,11 @@ class Handler(BaseHTTPRequestHandler):
             'editCodeHint': row['edit_code'][-3:],
             'hasContent': bool(content),
             'content': content,
+            'googleReviews': {
+                'enabled': bool(row['reviews_enabled']),
+                'embedUrl': row['review_embed_url'] or '',
+                'buttonLabel': row['review_button_label'] or 'Recenzii Google',
+            },
         })
 
     def handle_public_verify(self, slug):
