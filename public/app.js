@@ -52,7 +52,7 @@ function renderLanding() {
     <section class="hero container">
       <span class="badge">QR Studio · administrare privată</span>
       <h1>Generezi un QR, clientul îl personalizează și îl poate actualiza ulterior cu un cod unic.</h1>
-      <p>Aplicația este gândită pentru workflow-ul tău: doar tu creezi și descarci coduri PNG, iar clientul poate schimba ulterior poze, text și video după scanare.</p>
+      <p>Aplicația este gândită pentru workflow-ul tău: doar tu creezi și descarci coduri PNG, iar clientul vede conținutul salvat la scanare și intră în editare doar cu codul unic.</p>
       <div class="actions">
         <a href="/admin"><button>Intră în dashboard</button></a>
       </div>
@@ -148,22 +148,122 @@ function renderLogin() {
   };
 }
 
-async function renderPublic(slug) {
-  const data = await api(`/api/public/qr/${slug}`);
-  const content = data.content || {
-    headline: '', body: '', buttonLabel: 'Editează cu codul unic',
-    theme: { background: '#0f172a', foreground: '#f8fafc', accent: '#38bdf8', fontFamily: fonts[0], textAlign: 'left' },
-    imageUrl: '', videoUrl: ''
+function getStoredEditCode(slug) {
+  return sessionStorage.getItem(`qr-edit-code:${slug}`) || '';
+}
+
+function setStoredEditCode(slug, code) {
+  if (code) sessionStorage.setItem(`qr-edit-code:${slug}`, code.toUpperCase());
+}
+
+function clearStoredEditCode(slug) {
+  sessionStorage.removeItem(`qr-edit-code:${slug}`);
+}
+
+function getEditMode(slug, data) {
+  const params = new URLSearchParams(location.search);
+  if (!data.hasContent) return true;
+  if (params.get('edit') !== '1') return false;
+  return Boolean(getStoredEditCode(slug));
+}
+
+function goToViewMode(slug) {
+  history.replaceState({}, '', `/c/${slug}`);
+  route();
+}
+
+function goToEditMode(slug) {
+  history.replaceState({}, '', `/c/${slug}?edit=1`);
+  route();
+}
+
+async function requestEditAccess(slug) {
+  const code = window.prompt('Introdu codul alfanumeric primit pentru a edita acest QR:');
+  if (!code) return;
+  try {
+    const result = await api(`/api/public/qr/${slug}/verify-edit-code`, {
+      method: 'POST',
+      body: JSON.stringify({ editCode: code })
+    });
+    if (result.ok) {
+      setStoredEditCode(slug, code);
+      goToEditMode(slug);
+    }
+  } catch (error) {
+    alert(error.message);
+  }
+}
+
+function getDefaultContent(data) {
+  return data.content || {
+    headline: '',
+    body: '',
+    buttonLabel: 'Editează cu codul unic',
+    theme: {
+      background: '#0f172a',
+      foreground: '#f8fafc',
+      accent: '#38bdf8',
+      fontFamily: fonts[0],
+      textAlign: 'left'
+    },
+    imageUrl: '',
+    videoUrl: ''
   };
+}
+
+function previewMarkup(content, label = 'Previzualizare live') {
+  return html`
+    <span class="badge" style="background:${content.theme.accent}22;color:${content.theme.accent};border-color:${content.theme.accent}66">${label}</span>
+    <h2>${escapeHtml(content.headline || 'Titlul tău apare aici')}</h2>
+    <p>${escapeHtml(content.body || 'Aici va apărea descrierea, oferta sau mesajul personalizat.')}</p>
+    ${content.imageUrl ? `<img src="${escapeAttribute(content.imageUrl)}" alt="vizual" />` : ''}
+    ${content.videoUrl ? `<video src="${escapeAttribute(content.videoUrl)}" controls></video>` : ''}
+    <button type="button" style="width:max-content;background:linear-gradient(135deg, ${content.theme.accent}, #2563eb)">${escapeHtml(content.buttonLabel || 'Editează')}</button>
+  `;
+}
+
+function renderPublicView(slug, data) {
+  const saved = getDefaultContent(data);
+  app.innerHTML = html`
+    <section class="hero container public-shell">
+      <div class="public-topbar">
+        <span class="badge">Experiență client</span>
+        <button id="editAccessBtn" class="secondary top-edit-btn">Editează</button>
+      </div>
+      <div class="preview public-preview">
+        <div class="preview-inner" id="savedPreview"></div>
+      </div>
+    </section>
+  `;
+
+  const preview = document.getElementById('savedPreview');
+  preview.style.background = saved.theme.background;
+  preview.style.color = saved.theme.foreground;
+  preview.style.fontFamily = saved.theme.fontFamily;
+  preview.style.textAlign = saved.theme.textAlign;
+  preview.innerHTML = html`
+    ${previewMarkup(saved, 'Versiune publicată')}
+    <p class="small">Apasă pe butonul „Editează” din dreapta sus și introdu codul alfanumeric pentru a reintra în formular.</p>
+  `;
+
+  document.getElementById('editAccessBtn').onclick = () => requestEditAccess(slug);
+}
+
+async function renderPublicEditor(slug, data) {
+  const content = getDefaultContent(data);
+  const storedCode = getStoredEditCode(slug);
   app.innerHTML = html`
     <section class="hero container">
-      <span class="badge">Experiență client</span>
+      <div class="public-topbar" style="margin-bottom:16px;">
+        <span class="badge">${data.hasContent ? 'Mod editare' : 'Configurare inițială'}</span>
+        ${data.hasContent ? '<button id="cancelEditBtn" class="secondary top-edit-btn">Înapoi la rezultat</button>' : ''}
+      </div>
       <div class="grid grid-2">
         <div class="card">
-          <h2>${data.hasContent ? 'Conținutul salvat la scanare' : 'Configurează conținutul la prima scanare'}</h2>
-          <p class="small">După salvare, la următoarea scanare se afișează automat rezultatul publicat. Pentru modificări ulterioare, clientul introduce codul alfanumeric unic.</p>
+          <h2>${data.hasContent ? 'Editează conținutul existent' : 'Configurează conținutul la prima scanare'}</h2>
+          <p class="small">După salvare, formularul dispare la scanările viitoare și se va afișa doar versiunea publicată.</p>
           <form id="editorForm">
-            ${data.hasContent ? '<label>Cod unic pentru editare<input name="editCode" placeholder="Introdu codul primit" /></label>' : ''}
+            ${data.hasContent ? `<div class="small" style="margin-bottom:16px;">Cod validat: <span class="code">${escapeHtml(storedCode)}</span></div>` : ''}
             <label>Titlu principal<input name="headline" value="${escapeHtml(content.headline || '')}" placeholder="Ex: Meniul video al locației" /></label>
             <label>Text descriptiv<textarea name="body" placeholder="Descriere / mesaj pentru client">${escapeHtml(content.body || '')}</textarea></label>
             <label>Eticheta butonului de re-editare<input name="buttonLabel" value="${escapeHtml(content.buttonLabel || '')}" /></label>
@@ -172,7 +272,7 @@ async function renderPublic(slug) {
               <label>Culoare text<input type="color" name="foreground" value="${content.theme.foreground}" /></label>
               <label>Culoare accent<input type="color" name="accent" value="${content.theme.accent}" /></label>
               <label>Aliniere text<select name="textAlign">
-                ${['left','center','right'].map(opt => `<option value="${opt}" ${content.theme.textAlign === opt ? 'selected' : ''}>${opt}</option>`).join('')}
+                ${['left', 'center', 'right'].map(opt => `<option value="${opt}" ${content.theme.textAlign === opt ? 'selected' : ''}>${opt}</option>`).join('')}
               </select></label>
               <label>Font<select name="fontFamily">
                 ${fonts.map(font => `<option value="${font}" ${content.theme.fontFamily === font ? 'selected' : ''}>${font}</option>`).join('')}
@@ -193,27 +293,31 @@ async function renderPublic(slug) {
       </div>
     </section>
   `;
+
   const form = document.getElementById('editorForm');
   const preview = document.getElementById('livePreview');
 
   const updatePreview = () => {
     const formData = new FormData(form);
-    const theme = {
-      background: formData.get('background'), foreground: formData.get('foreground'), accent: formData.get('accent'),
-      fontFamily: formData.get('fontFamily'), textAlign: formData.get('textAlign')
+    const previewContent = {
+      headline: formData.get('headline'),
+      body: formData.get('body'),
+      buttonLabel: formData.get('buttonLabel'),
+      imageUrl: formData.get('imageUrl') || content.imageUrl,
+      videoUrl: formData.get('videoUrl') || content.videoUrl,
+      theme: {
+        background: formData.get('background'),
+        foreground: formData.get('foreground'),
+        accent: formData.get('accent'),
+        textAlign: formData.get('textAlign'),
+        fontFamily: formData.get('fontFamily')
+      }
     };
-    preview.style.background = theme.background;
-    preview.style.color = theme.foreground;
-    preview.style.fontFamily = theme.fontFamily;
-    preview.style.textAlign = theme.textAlign;
-    preview.innerHTML = html`
-      <span class="badge" style="background:${theme.accent}22;color:${theme.accent};border-color:${theme.accent}66">Previzualizare live</span>
-      <h2>${escapeHtml(formData.get('headline') || 'Titlul tău apare aici')}</h2>
-      <p>${escapeHtml(formData.get('body') || 'Aici va apărea descrierea, oferta sau mesajul personalizat.')}</p>
-      ${(formData.get('imageUrl') || content.imageUrl) ? `<img src="${escapeAttribute(formData.get('imageUrl') || content.imageUrl)}" alt="preview" />` : ''}
-      ${(formData.get('videoUrl') || content.videoUrl) ? `<video src="${escapeAttribute(formData.get('videoUrl') || content.videoUrl)}" controls></video>` : ''}
-      <button type="button" style="width:max-content;background:linear-gradient(135deg, ${theme.accent}, #2563eb)">${escapeHtml(formData.get('buttonLabel') || 'Editează')}</button>
-    `;
+    preview.style.background = previewContent.theme.background;
+    preview.style.color = previewContent.theme.foreground;
+    preview.style.fontFamily = previewContent.theme.fontFamily;
+    preview.style.textAlign = previewContent.theme.textAlign;
+    preview.innerHTML = previewMarkup(previewContent);
   };
 
   form.oninput = updatePreview;
@@ -223,7 +327,7 @@ async function renderPublic(slug) {
     event.preventDefault();
     const formData = new FormData(form);
     const payload = {
-      editCode: formData.get('editCode') || '',
+      editCode: storedCode,
       headline: formData.get('headline'),
       body: formData.get('body'),
       buttonLabel: formData.get('buttonLabel'),
@@ -241,36 +345,36 @@ async function renderPublic(slug) {
     };
     try {
       await api(`/api/public/qr/${slug}/save`, { method: 'POST', body: JSON.stringify(payload) });
-      alert('Conținutul a fost salvat. La următoarea scanare se va afișa versiunea publicată.');
       state.selectedFileImage = null;
       state.selectedFileVideo = null;
-      renderPublic(slug);
+      if (!data.hasContent) {
+        clearStoredEditCode(slug);
+      }
+      alert('Conținutul a fost salvat. De acum, la scanare se va afișa doar versiunea publicată.');
+      goToViewMode(slug);
     } catch (error) {
       alert(error.message);
     }
   };
-  updatePreview();
 
   if (data.hasContent) {
-    const saved = data.content;
-    preview.style.background = saved.theme.background;
-    preview.style.color = saved.theme.foreground;
-    preview.style.fontFamily = saved.theme.fontFamily;
-    preview.style.textAlign = saved.theme.textAlign;
-    preview.innerHTML = html`
-      <span class="badge" style="background:${saved.theme.accent}22;color:${saved.theme.accent};border-color:${saved.theme.accent}66">Versiune publicată</span>
-      <h2>${escapeHtml(saved.headline || '')}</h2>
-      <p>${escapeHtml(saved.body || '')}</p>
-      ${saved.imageUrl ? `<img src="${escapeAttribute(saved.imageUrl)}" alt="imagine publicată" />` : ''}
-      ${saved.videoUrl ? `<video src="${escapeAttribute(saved.videoUrl)}" controls></video>` : ''}
-      <button type="button" style="width:max-content;background:linear-gradient(135deg, ${saved.theme.accent}, #2563eb)">${escapeHtml(saved.buttonLabel || 'Editează')}</button>
-      <p class="small">Pentru a modifica, introduce codul complet de editare și salvează din nou.</p>
-    `;
+    document.getElementById('cancelEditBtn').onclick = () => goToViewMode(slug);
   }
+
+  updatePreview();
+}
+
+async function renderPublic(slug) {
+  const data = await api(`/api/public/qr/${slug}`);
+  const editMode = getEditMode(slug, data);
+  if (data.hasContent && !editMode) {
+    return renderPublicView(slug, data);
+  }
+  return renderPublicEditor(slug, data);
 }
 
 function escapeHtml(value) {
-  return String(value || '').replace(/[&<>\"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[char]));
+  return String(value || '').replace(/[&<>"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[char]));
 }
 
 function escapeAttribute(value) {

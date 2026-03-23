@@ -147,6 +147,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.handle_logout()
         if path == '/api/admin/qr-codes':
             return self.handle_admin_create()
+        if path.startswith('/api/public/qr/') and path.endswith('/verify-edit-code'):
+            slug = path.split('/')[-2]
+            return self.handle_public_verify(slug)
         if path.startswith('/api/public/qr/') and path.endswith('/save'):
             slug = path.split('/')[-2]
             return self.handle_public_save(slug)
@@ -267,6 +270,18 @@ class Handler(BaseHTTPRequestHandler):
             'hasContent': bool(content),
             'content': content,
         })
+
+    def handle_public_verify(self, slug):
+        body = parse_body(self)
+        conn = db()
+        row = conn.execute('SELECT edit_code FROM qr_codes WHERE slug = ?', (slug,)).fetchone()
+        conn.close()
+        if not row:
+            return json_response(self, {'error': 'Codul QR nu există.'}, 404)
+        supplied_code = (body.get('editCode') or '').strip().upper()
+        if supplied_code != row['edit_code']:
+            return json_response(self, {'error': 'Codul de editare este invalid.'}, 403)
+        return json_response(self, {'ok': True})
 
     def handle_public_save(self, slug):
         body = parse_body(self)

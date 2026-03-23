@@ -115,3 +115,15 @@ button.danger { background: linear-gradient(135deg, var(--danger), #be123c); }
   .qr-item { grid-template-columns: 1fr; }
   .hero { padding-top: 32px; }
 }
+
+.public-shell { padding-bottom: 48px; }
+.public-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.top-edit-btn { white-space: nowrap; }
+.public-preview .preview-inner {
+  min-height: 540px;
+}
