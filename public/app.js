@@ -211,14 +211,21 @@ function getDefaultContent(data) {
   };
 }
 
-function previewMarkup(content, label = 'Previzualizare live') {
+function previewMarkup(content, label = 'Previzualizare live', options = {}) {
+  const { showButton = true, usePlaceholders = true } = options;
+  const headline = String(content.headline || '').trim();
+  const body = String(content.body || '').trim();
+  const buttonLabel = String(content.buttonLabel || '').trim();
+  const hasImage = Boolean(content.imageUrl);
+  const hasVideo = Boolean(content.videoUrl);
+
   return html`
     <span class="badge" style="background:${content.theme.accent}22;color:${content.theme.accent};border-color:${content.theme.accent}66">${label}</span>
-    <h2>${escapeHtml(content.headline || 'Titlul tău apare aici')}</h2>
-    <p>${escapeHtml(content.body || 'Aici va apărea descrierea, oferta sau mesajul personalizat.')}</p>
-    ${content.imageUrl ? `<img src="${escapeAttribute(content.imageUrl)}" alt="vizual" />` : ''}
-    ${content.videoUrl ? `<video src="${escapeAttribute(content.videoUrl)}" controls></video>` : ''}
-    <button type="button" style="width:max-content;background:linear-gradient(135deg, ${content.theme.accent}, #2563eb)">${escapeHtml(content.buttonLabel || 'Editează')}</button>
+    ${headline ? `<h2>${escapeHtml(headline)}</h2>` : (usePlaceholders ? '<h2>Titlul tău apare aici</h2>' : '')}
+    ${body ? `<p>${escapeHtml(body)}</p>` : (usePlaceholders ? '<p>Aici va apărea descrierea, oferta sau mesajul personalizat.</p>' : '')}
+    ${hasImage ? `<img src="${escapeAttribute(content.imageUrl)}" alt="vizual" />` : ''}
+    ${hasVideo ? `<video src="${escapeAttribute(content.videoUrl)}" controls></video>` : ''}
+    ${showButton && buttonLabel ? `<button type="button" style="width:max-content;background:linear-gradient(135deg, ${content.theme.accent}, #2563eb)">${escapeHtml(buttonLabel)}</button>` : ''}
   `;
 }
 
@@ -242,7 +249,7 @@ function renderPublicView(slug, data) {
   preview.style.fontFamily = saved.theme.fontFamily;
   preview.style.textAlign = saved.theme.textAlign;
   preview.innerHTML = html`
-    ${previewMarkup(saved, 'Versiune publicată')}
+    ${previewMarkup(saved, 'Versiune publicată', { showButton: false, usePlaceholders: false })}
     <p class="small">Apasă pe butonul „Editează” din dreapta sus și introdu codul alfanumeric pentru a reintra în formular.</p>
   `;
 
@@ -317,7 +324,7 @@ async function renderPublicEditor(slug, data) {
     preview.style.color = previewContent.theme.foreground;
     preview.style.fontFamily = previewContent.theme.fontFamily;
     preview.style.textAlign = previewContent.theme.textAlign;
-    preview.innerHTML = previewMarkup(previewContent);
+    preview.innerHTML = previewMarkup(previewContent, 'Previzualizare live', { showButton: Boolean(previewContent.buttonLabel), usePlaceholders: true });
   };
 
   form.oninput = updatePreview;
