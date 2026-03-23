@@ -212,7 +212,7 @@ function getDefaultContent(data) {
 }
 
 function previewMarkup(content, label = 'Previzualizare live', options = {}) {
-  const { showButton = true, usePlaceholders = true } = options;
+  const { showButton = true, usePlaceholders = true, showLabel = true } = options;
   const headline = String(content.headline || '').trim();
   const body = String(content.body || '').trim();
   const buttonLabel = String(content.buttonLabel || '').trim();
@@ -220,7 +220,7 @@ function previewMarkup(content, label = 'Previzualizare live', options = {}) {
   const hasVideo = Boolean(content.videoUrl);
 
   return html`
-    <span class="badge" style="background:${content.theme.accent}22;color:${content.theme.accent};border-color:${content.theme.accent}66">${label}</span>
+    ${showLabel ? `<span class="badge" style="background:${content.theme.accent}22;color:${content.theme.accent};border-color:${content.theme.accent}66">${label}</span>` : ''}
     ${headline ? `<h2>${escapeHtml(headline)}</h2>` : (usePlaceholders ? '<h2>Titlul tău apare aici</h2>' : '')}
     ${body ? `<p>${escapeHtml(body)}</p>` : (usePlaceholders ? '<p>Aici va apărea descrierea, oferta sau mesajul personalizat.</p>' : '')}
     ${hasImage ? `<img src="${escapeAttribute(content.imageUrl)}" alt="vizual" />` : ''}
@@ -233,8 +233,7 @@ function renderPublicView(slug, data) {
   const saved = getDefaultContent(data);
   app.innerHTML = html`
     <section class="hero container public-shell">
-      <div class="public-topbar">
-        <span class="badge">Experiență client</span>
+      <div class="public-topbar public-topbar-end">
         <button id="editAccessBtn" class="secondary top-edit-btn">Editează</button>
       </div>
       <div class="preview public-preview">
@@ -248,10 +247,7 @@ function renderPublicView(slug, data) {
   preview.style.color = saved.theme.foreground;
   preview.style.fontFamily = saved.theme.fontFamily;
   preview.style.textAlign = saved.theme.textAlign;
-  preview.innerHTML = html`
-    ${previewMarkup(saved, 'Versiune publicată', { showButton: false, usePlaceholders: false })}
-    <p class="small">Apasă pe butonul „Editează” din dreapta sus și introdu codul alfanumeric pentru a reintra în formular.</p>
-  `;
+  preview.innerHTML = previewMarkup(saved, '', { showButton: false, usePlaceholders: false, showLabel: false });
 
   document.getElementById('editAccessBtn').onclick = () => requestEditAccess(slug);
 }

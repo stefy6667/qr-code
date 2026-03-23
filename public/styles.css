@@ -124,6 +124,7 @@ button.danger { background: linear-gradient(135deg, var(--danger), #be123c); }
   gap: 16px;
 }
 .top-edit-btn { white-space: nowrap; }
+.public-topbar-end { justify-content: flex-end; }
 .public-preview .preview-inner {
   min-height: 540px;
 }
