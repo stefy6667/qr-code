@@ -19,6 +19,9 @@ python3 server.py
 - `ADMIN_USERNAME` - utilizator admin
 - `ADMIN_PASSWORD` - parola admin
 - `SESSION_SECRET` - secret pentru cookie-ul de sesiune
+- `DATA_ROOT` - directorul persistent pentru baza de date și fișiere uploadate; implicit este `./data` local și trebuie setat pe Render la `/var/data`
+- `DB_PATH` - opțional, cale explicită pentru fișierul SQLite
+- `UPLOAD_DIR` - opțional, cale explicită pentru fișierele media
 
 ## Deploy pe Render
 
@@ -26,7 +29,8 @@ python3 server.py
 2. Build Command: `chmod +x server.py`
 3. Start Command: `python3 server.py`
 4. Setează variabilele de mediu de mai sus.
-5. Opțional, atașează un persistent disk pentru directoarele `data/` și `uploads/` dacă vrei ca baza de date și fișierele să rămână după redeploy.
+5. Montează un **persistent disk** și setează `DATA_ROOT=/var/data` ca baza de date și upload-urile să nu se piardă la refresh / restart / redeploy.
+6. Fișierul `render.yaml` inclus configurează deja un disk la `/var/data`; dacă faci deploy din YAML, păstrează această setare.
 
 ## Observație QR
 

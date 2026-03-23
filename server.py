@@ -14,12 +14,12 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 
 ROOT = Path(__file__).resolve().parent
-DATA_DIR = ROOT / 'data'
-UPLOAD_DIR = ROOT / 'uploads'
+DATA_ROOT = Path(os.environ.get('DATA_ROOT', str(ROOT / 'data'))).resolve()
+UPLOAD_DIR = Path(os.environ.get('UPLOAD_DIR', str(DATA_ROOT / 'uploads'))).resolve()
 PUBLIC_DIR = ROOT / 'public'
-DB_PATH = DATA_DIR / 'app.db'
-DATA_DIR.mkdir(exist_ok=True)
-UPLOAD_DIR.mkdir(exist_ok=True)
+DB_PATH = Path(os.environ.get('DB_PATH', str(DATA_ROOT / 'app.db'))).resolve()
+DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 PUBLIC_DIR.mkdir(exist_ok=True)
 
 ADMIN_USER = os.environ.get('ADMIN_USERNAME', 'admin')
@@ -32,6 +32,8 @@ BASE_URL = os.environ.get('BASE_URL', f'http://localhost:{PORT}')
 def db():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute('PRAGMA journal_mode=WAL')
+    conn.execute('PRAGMA foreign_keys=ON')
     return conn
 
 

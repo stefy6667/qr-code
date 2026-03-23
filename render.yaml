@@ -5,6 +5,10 @@ services:
     plan: starter
     buildCommand: chmod +x server.py
     startCommand: python3 server.py
+    disk:
+      name: qr-studio-data
+      mountPath: /var/data
+      sizeGB: 1
     envVars:
       - key: BASE_URL
         sync: false
@@ -14,3 +18,5 @@ services:
         sync: false
       - key: SESSION_SECRET
         sync: false
+      - key: DATA_ROOT
+        value: /var/data
