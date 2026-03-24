@@ -372,6 +372,7 @@ class Handler(BaseHTTPRequestHandler):
             },
             'imageUrl': image_url,
             'videoUrl': video_url,
+            'actionLink': body.get('actionLink') if isinstance(body.get('actionLink'), dict) else None,
         }
         conn.execute('UPDATE qr_codes SET content_json = ?, updated_at = CURRENT_TIMESTAMP WHERE slug = ?', (json.dumps(content), slug))
         conn.commit()

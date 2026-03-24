@@ -301,7 +301,8 @@ function getDefaultContent(data) {
       textAlign: 'left'
     },
     imageUrl: '',
-    videoUrl: ''
+    videoUrl: '',
+    actionLink: null
   };
 }
 
@@ -355,8 +356,47 @@ function mediaAlignStyle(textAlign) {
   return 'display:block;margin-left:0;margin-right:auto;';
 }
 
+function detectPlatformFromUrl(rawUrl) {
+  const value = String(rawUrl || '').trim();
+  if (!value) return { key: 'link', label: 'Deschide linkul', host: '' };
+  try {
+    const url = new URL(value.startsWith('http') ? value : `https://${value}`);
+    const host = url.hostname.replace(/^www\./, '').toLowerCase();
+    const map = [
+      { key: 'instagram', match: ['instagram.com'], label: 'Instagram' },
+      { key: 'facebook', match: ['facebook.com', 'fb.com'], label: 'Facebook' },
+      { key: 'tiktok', match: ['tiktok.com'], label: 'TikTok' },
+      { key: 'youtube', match: ['youtube.com', 'youtu.be'], label: 'YouTube' },
+      { key: 'whatsapp', match: ['wa.me', 'whatsapp.com'], label: 'WhatsApp' },
+      { key: 'telegram', match: ['t.me', 'telegram.me', 'telegram.org'], label: 'Telegram' },
+      { key: 'maps', match: ['maps.google.com', 'google.com', 'goo.gl'], label: 'Google Maps' },
+      { key: 'linkedin', match: ['linkedin.com'], label: 'LinkedIn' },
+      { key: 'x', match: ['x.com', 'twitter.com'], label: 'X / Twitter' }
+    ];
+    const found = map.find((platform) => platform.match.some((item) => host.includes(item)));
+    if (found) return { key: found.key, label: found.label, host };
+    return { key: 'link', label: host || 'Link extern', host };
+  } catch (error) {
+    return { key: 'link', label: 'Link extern', host: '' };
+  }
+}
+
+function normalizeActionLink(rawUrl, customLabel = '') {
+  const value = String(rawUrl || '').trim();
+  if (!value) return null;
+  const normalizedUrl = value.startsWith('http://') || value.startsWith('https://') ? value : `https://${value}`;
+  const platform = detectPlatformFromUrl(normalizedUrl);
+  const label = String(customLabel || '').trim() || `Deschide ${platform.label}`;
+  return {
+    url: normalizedUrl,
+    label,
+    platform: platform.key,
+    platformLabel: platform.label
+  };
+}
+
 function previewMarkup(content, label = 'Previzualizare live', options = {}) {
-  const { showButton = true, usePlaceholders = true, showLabel = true, googleReviews = null } = options;
+  const { showButton = true, usePlaceholders = true, showLabel = true, googleReviews = null, linkOverride = null } = options;
   const headline = String(content.headline || '').trim();
   const body = String(content.body || '').trim();
   const buttonLabel = String(content.buttonLabel || '').trim();
@@ -364,6 +404,7 @@ function previewMarkup(content, label = 'Previzualizare live', options = {}) {
   const hasVideo = Boolean(content.videoUrl);
   const mediaStyle = mediaAlignStyle(content.theme.textAlign);
   const reviewsEnabled = Boolean(googleReviews?.enabled && googleReviews?.embedUrl);
+  const actionLink = linkOverride || normalizeActionLink(content.actionLink?.url, content.actionLink?.label);
 
   return html`
     ${showLabel ? `<span class="badge" style="background:${content.theme.accent}22;color:${content.theme.accent};border-color:${content.theme.accent}66">${label}</span>` : ''}
@@ -372,6 +413,7 @@ function previewMarkup(content, label = 'Previzualizare live', options = {}) {
     ${hasImage ? `<img src="${escapeAttribute(content.imageUrl)}" alt="vizual" style="${mediaStyle}" />` : ''}
     ${hasVideo ? `<video src="${escapeAttribute(content.videoUrl)}" controls style="${mediaStyle}"></video>` : ''}
     ${showButton && buttonLabel ? `<button type="button" style="width:max-content;background:linear-gradient(135deg, ${content.theme.accent}, #2563eb)">${escapeHtml(buttonLabel)}</button>` : ''}
+    ${actionLink ? `<a href="${escapeAttribute(actionLink.url)}" target="_blank" rel="noopener noreferrer" class="platform-link-btn platform-${escapeAttribute(actionLink.platform)}" style="--accent:${content.theme.accent};">${escapeHtml(actionLink.label)}</a>` : ''}
     ${reviewsEnabled ? html`
       <div class="google-reviews-block">
         <div class="google-reviews-header">${escapeHtml(googleReviews.buttonLabel || 'Recenzii Google')}</div>
@@ -436,6 +478,8 @@ async function renderPublicEditor(slug, data) {
               <label>Video (upload)<input type="file" name="videoFile" accept="video/mp4,video/webm" /></label>
               <label>URL imagine alternativ<input name="imageUrl" value="${escapeHtml(content.imageUrl || '')}" placeholder="https://..." /></label>
               <label>URL video alternativ<input name="videoUrl" value="${escapeHtml(content.videoUrl || '')}" placeholder="https://..." /></label>
+              <label>Link extern (opțional)<input name="actionLinkUrl" value="${escapeHtml(content.actionLink?.url || '')}" placeholder="https://instagram.com/..." /></label>
+              <label>Text buton link (opțional)<input name="actionLinkLabel" value="${escapeHtml(content.actionLink?.label || '')}" placeholder="Ex: Urmărește-ne pe Instagram" /></label>
             </div>
             <div class="actions">
               <button type="submit">Salvează experiența</button>
@@ -460,6 +504,7 @@ async function renderPublicEditor(slug, data) {
       buttonLabel: formData.get('buttonLabel'),
       imageUrl: formData.get('imageUrl') || content.imageUrl,
       videoUrl: formData.get('videoUrl') || content.videoUrl,
+      actionLink: normalizeActionLink(formData.get('actionLinkUrl'), formData.get('actionLinkLabel')),
       theme: {
         background: formData.get('background'),
         foreground: formData.get('foreground'),
@@ -488,6 +533,7 @@ async function renderPublicEditor(slug, data) {
       buttonLabel: formData.get('buttonLabel'),
       imageUrl: formData.get('imageUrl'),
       videoUrl: formData.get('videoUrl'),
+      actionLink: normalizeActionLink(formData.get('actionLinkUrl'), formData.get('actionLinkLabel')),
       imageDataUrl: await getDataUrl(state.selectedFileImage),
       videoDataUrl: await getDataUrl(state.selectedFileVideo),
       theme: {
