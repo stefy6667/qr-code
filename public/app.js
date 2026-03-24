@@ -14,6 +14,65 @@ const fonts = [
   'Courier New, monospace'
 ];
 
+const qrStylePresets = {
+  aurora: {
+    label: 'Aurora Glow',
+    radius: 0.38,
+    fill: {
+      type: 'linear-gradient',
+      position: [0, 0, 1, 1],
+      colorStops: [[0, '#22d3ee'], [0.55, '#4f46e5'], [1, '#d946ef']]
+    },
+    background: '#ffffff'
+  },
+  ember: {
+    label: 'Ember Heat',
+    radius: 0.46,
+    fill: {
+      type: 'radial-gradient',
+      position: [0.5, 0.5, 0.12, 0.5, 0.5, 0.75],
+      colorStops: [[0, '#fde047'], [0.55, '#f97316'], [1, '#ef4444']]
+    },
+    background: '#111111'
+  },
+  ocean: {
+    label: 'Ocean Glass',
+    radius: 0.18,
+    fill: {
+      type: 'linear-gradient',
+      position: [0, 0, 1, 1],
+      colorStops: [[0, '#0f172a'], [0.4, '#1d4ed8'], [1, '#38bdf8']]
+    },
+    background: '#ffffff'
+  },
+  frost: {
+    label: 'Frost Blue',
+    radius: 0.3,
+    fill: {
+      type: 'linear-gradient',
+      position: [0, 0, 0, 1],
+      colorStops: [[0, '#0ea5e9'], [1, '#ffffff']]
+    },
+    background: '#111827'
+  },
+  mono: {
+    label: 'Mono Rounded',
+    radius: 0.5,
+    fill: '#2f2f2f',
+    background: '#ffffff'
+  },
+  sunset: {
+    label: 'Sunset Neon',
+    radius: 0.45,
+    fill: {
+      type: 'linear-gradient',
+      position: [0, 0, 1, 1],
+      colorStops: [[0, '#9333ea'], [0.5, '#ec4899'], [1, '#f59e0b']]
+    },
+    background: '#151515'
+  }
+};
+
 function html(strings, ...values) {
   return strings.reduce((acc, str, i) => acc + str + (values[i] ?? ''), '');
 }
@@ -89,9 +148,11 @@ async function renderAdmin() {
         ${state.items.map(item => html`
           <article class="card qr-item">
             <div>
-              <img src="${item.qrImageUrl}" alt="QR ${item.title}" />
+              <div class="qr-preview-card ${item.qrStylePreset || 'aurora'}">
+                <canvas class="qr-canvas" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-size="170"></canvas>
+              </div>
               <div class="actions" style="margin-top:12px">
-                <a href="${item.qrImageUrl}" download="${item.slug}.png"><button>Download PNG</button></a>
+                <button type="button" class="download-qr-btn" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-name="${escapeAttribute(item.slug)}">Download PNG</button>
               </div>
             </div>
             <div>
@@ -106,6 +167,7 @@ async function renderAdmin() {
                 <label class="inline-toggle"><input type="checkbox" name="reviewsEnabled" ${item.googleReviews?.enabled ? 'checked' : ''} /> Activează Google Reviews pentru acest QR</label>
                 <label>Google Embed URL<input name="reviewEmbedUrl" value="${escapeHtml(item.googleReviews?.embedUrl || '')}" placeholder="https://www.google.com/maps/embed?..." /></label>
                 <label>Text buton recenzii<input name="reviewButtonLabel" value="${escapeHtml(item.googleReviews?.buttonLabel || 'Recenzii Google')}" /></label>
+                <label>Stil QR<select name="qrStylePreset">${Object.entries(qrStylePresets).map(([key, preset]) => `<option value="${key}" ${item.qrStylePreset === key ? 'selected' : ''}>${preset.label}</option>`).join('')}</select></label>
                 <div class="actions"><button type="submit" class="secondary">Salvează setările</button></div>
               </form>
             </div>
@@ -137,7 +199,8 @@ async function renderAdmin() {
               enabled: formData.get('reviewsEnabled') === 'on',
               embedUrl: formData.get('reviewEmbedUrl'),
               buttonLabel: formData.get('reviewButtonLabel'),
-            }
+            },
+            qrStylePreset: formData.get('qrStylePreset')
           })
         });
         route();
@@ -146,6 +209,7 @@ async function renderAdmin() {
       }
     };
   });
+  renderAdminQrCodes();
 }
 
 function renderLogin() {
@@ -239,6 +303,50 @@ function getDefaultContent(data) {
     imageUrl: '',
     videoUrl: ''
   };
+}
+
+function getQrPreset(styleKey) {
+  return qrStylePresets[styleKey] || qrStylePresets.aurora;
+}
+
+function buildQrRenderConfig(text, styleKey, size = 240) {
+  const preset = getQrPreset(styleKey);
+  return {
+    text,
+    radius: preset.radius,
+    ecLevel: 'H',
+    fill: preset.fill,
+    background: preset.background,
+    size
+  };
+}
+
+function renderPrettyQr(canvas, text, styleKey, size = 240) {
+  if (!window.QrCreator || !canvas) return false;
+  canvas.width = size;
+  canvas.height = size;
+  window.QrCreator.render(buildQrRenderConfig(text, styleKey, size), canvas);
+  return true;
+}
+
+function downloadPrettyQr(text, styleKey, filename) {
+  if (!window.QrCreator) return window.open(text, '_blank');
+  const canvas = document.createElement('canvas');
+  const size = 1200;
+  renderPrettyQr(canvas, text, styleKey, size);
+  const link = document.createElement('a');
+  link.href = canvas.toDataURL('image/png');
+  link.download = `${filename}.png`;
+  link.click();
+}
+
+function renderAdminQrCodes() {
+  document.querySelectorAll('.qr-canvas').forEach((canvas) => {
+    renderPrettyQr(canvas, canvas.dataset.qrUrl, canvas.dataset.qrStyle, Number(canvas.dataset.qrSize || 170));
+  });
+  document.querySelectorAll('.download-qr-btn').forEach((button) => {
+    button.onclick = () => downloadPrettyQr(button.dataset.qrUrl, button.dataset.qrStyle, button.dataset.qrName || 'qr-code');
+  });
 }
 
 function mediaAlignStyle(textAlign) {

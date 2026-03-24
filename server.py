@@ -51,7 +51,8 @@ def init_db():
             content_json TEXT,
             reviews_enabled INTEGER NOT NULL DEFAULT 0,
             review_embed_url TEXT,
-            review_button_label TEXT
+            review_button_label TEXT,
+            qr_style_preset TEXT NOT NULL DEFAULT 'aurora'
         );
         '''
     )
@@ -62,6 +63,8 @@ def init_db():
         conn.execute("ALTER TABLE qr_codes ADD COLUMN review_embed_url TEXT")
     if 'review_button_label' not in columns:
         conn.execute("ALTER TABLE qr_codes ADD COLUMN review_button_label TEXT")
+    if 'qr_style_preset' not in columns:
+        conn.execute("ALTER TABLE qr_codes ADD COLUMN qr_style_preset TEXT NOT NULL DEFAULT 'aurora'")
     conn.commit()
     conn.close()
 
@@ -258,6 +261,7 @@ class Handler(BaseHTTPRequestHandler):
                     'embedUrl': row['review_embed_url'] or '',
                     'buttonLabel': row['review_button_label'] or 'Recenzii Google',
                 },
+                'qrStylePreset': row['qr_style_preset'] or 'aurora',
                 'scanUrl': f'{BASE_URL}/c/{row["slug"]}',
                 'qrImageUrl': f'https://api.qrserver.com/v1/create-qr-code/?size=1200x1200&data={quote(f"{BASE_URL}/c/{row["slug"]}", safe="")}',
             })
@@ -288,16 +292,17 @@ class Handler(BaseHTTPRequestHandler):
         reviews_enabled = 1 if body.get('googleReviews', {}).get('enabled') else 0
         review_embed_url = (body.get('googleReviews', {}).get('embedUrl') or '').strip()
         review_button_label = (body.get('googleReviews', {}).get('buttonLabel') or 'Recenzii Google').strip()
+        qr_style_preset = (body.get('qrStylePreset') or 'aurora').strip() or 'aurora'
         title = (body.get('title') or '').strip()
         if title:
             conn.execute(
-                'UPDATE qr_codes SET title = ?, reviews_enabled = ?, review_embed_url = ?, review_button_label = ?, updated_at = CURRENT_TIMESTAMP WHERE slug = ?',
-                (title, reviews_enabled, review_embed_url, review_button_label, slug),
+                'UPDATE qr_codes SET title = ?, reviews_enabled = ?, review_embed_url = ?, review_button_label = ?, qr_style_preset = ?, updated_at = CURRENT_TIMESTAMP WHERE slug = ?',
+                (title, reviews_enabled, review_embed_url, review_button_label, qr_style_preset, slug),
             )
         else:
             conn.execute(
-                'UPDATE qr_codes SET reviews_enabled = ?, review_embed_url = ?, review_button_label = ?, updated_at = CURRENT_TIMESTAMP WHERE slug = ?',
-                (reviews_enabled, review_embed_url, review_button_label, slug),
+                'UPDATE qr_codes SET reviews_enabled = ?, review_embed_url = ?, review_button_label = ?, qr_style_preset = ?, updated_at = CURRENT_TIMESTAMP WHERE slug = ?',
+                (reviews_enabled, review_embed_url, review_button_label, qr_style_preset, slug),
             )
         conn.commit()
         conn.close()
