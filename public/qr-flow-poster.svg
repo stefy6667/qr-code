@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2480" height="3508" viewBox="0 0 2480 3508" role="img" aria-labelledby="title desc">
+  <title id="title">Flux configurare cod QR</title>
+  <desc id="desc">Poster A4 pentru client cu pașii de configurare și re-editare a codului QR.</desc>
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0b1220"/>
+      <stop offset="50%" stop-color="#111c34"/>
+      <stop offset="100%" stop-color="#1a1140"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#22d3ee"/>
+      <stop offset="50%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#d946ef"/>
+    </linearGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#17233f" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#10192d" stop-opacity="0.95"/>
+    </linearGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#000000" flood-opacity="0.45"/>
+    </filter>
+    <style>
+      .h1 { font: 800 112px 'Inter', 'Segoe UI', Arial, sans-serif; fill: #f8fafc; }
+      .h2 { font: 700 58px 'Inter', 'Segoe UI', Arial, sans-serif; fill: #e2e8f0; }
+      .p { font: 500 42px 'Inter', 'Segoe UI', Arial, sans-serif; fill: #cbd5e1; }
+      .small { font: 500 34px 'Inter', 'Segoe UI', Arial, sans-serif; fill: #a5b4fc; }
+      .step { font: 700 50px 'Inter', 'Segoe UI', Arial, sans-serif; fill: #f8fafc; }
+      .stepText { font: 500 38px 'Inter', 'Segoe UI', Arial, sans-serif; fill: #dbeafe; }
+      .code { font: 700 42px 'JetBrains Mono', 'Consolas', monospace; fill: #7dd3fc; }
+    </style>
+  </defs>
+
+  <rect width="2480" height="3508" fill="url(#bg)"/>
+  <circle cx="2200" cy="260" r="440" fill="#4f46e5" opacity="0.22"/>
+  <circle cx="270" cy="3280" r="510" fill="#06b6d4" opacity="0.16"/>
+
+  <g transform="translate(170 150)">
+    <rect x="0" y="0" width="2140" height="3208" rx="64" fill="none" stroke="url(#accent)" stroke-width="5" opacity="0.8"/>
+
+    <text class="small" x="90" y="130">QR STUDIO · GHID CLIENT</text>
+    <text class="h1" x="90" y="250">Configurează codul QR în 4 pași</text>
+    <text class="p" x="90" y="320">Scanezi, personalizezi, salvezi — iar ulterior poți edita din nou cu codul unic.</text>
+
+    <g transform="translate(90 430)" filter="url(#softShadow)">
+      <rect x="0" y="0" width="1960" height="520" rx="38" fill="url(#card)" stroke="#334155" stroke-width="2"/>
+      <circle cx="96" cy="90" r="52" fill="url(#accent)"/>
+      <text class="step" x="78" y="107">1</text>
+      <text class="step" x="185" y="105">Scanează codul QR</text>
+      <text class="stepText" x="185" y="170">Folosește camera telefonului sau aplicația preferată de scanare.</text>
+      <rect x="1270" y="66" width="560" height="390" rx="26" fill="#0f172a" stroke="#38bdf8" stroke-width="2"/>
+      <rect x="1328" y="124" width="444" height="274" rx="20" fill="#e2e8f0"/>
+      <rect x="1380" y="176" width="120" height="120" fill="#2563eb"/>
+      <rect x="1616" y="176" width="120" height="120" fill="#06b6d4"/>
+      <rect x="1498" y="294" width="120" height="120" fill="#7c3aed"/>
+      <text class="small" x="1328" y="452">Exemplu cod QR</text>
+    </g>
+
+    <g transform="translate(90 1030)" filter="url(#softShadow)">
+      <rect x="0" y="0" width="1960" height="520" rx="38" fill="url(#card)" stroke="#334155" stroke-width="2"/>
+      <circle cx="96" cy="90" r="52" fill="url(#accent)"/>
+      <text class="step" x="78" y="107">2</text>
+      <text class="step" x="185" y="105">Personalizează conținutul</text>
+      <text class="stepText" x="185" y="170">Adaugă text, imagine, video și linkurile tale de social media.</text>
+      <text class="stepText" x="185" y="226">Poți schimba culori, font și alinierea exact cum îți dorești.</text>
+      <rect x="1240" y="74" width="620" height="360" rx="24" fill="#0b1324" stroke="#6366f1" stroke-width="2"/>
+      <rect x="1280" y="114" width="260" height="38" rx="10" fill="#334155"/>
+      <rect x="1280" y="170" width="450" height="30" rx="10" fill="#1e293b"/>
+      <rect x="1280" y="216" width="350" height="30" rx="10" fill="#1e293b"/>
+      <rect x="1280" y="262" width="540" height="30" rx="10" fill="#1e293b"/>
+      <rect x="1280" y="316" width="220" height="56" rx="28" fill="url(#accent)"/>
+      <text class="small" x="1320" y="353" fill="#ffffff">Salvează</text>
+    </g>
+
+    <g transform="translate(90 1630)" filter="url(#softShadow)">
+      <rect x="0" y="0" width="1960" height="520" rx="38" fill="url(#card)" stroke="#334155" stroke-width="2"/>
+      <circle cx="96" cy="90" r="52" fill="url(#accent)"/>
+      <text class="step" x="78" y="107">3</text>
+      <text class="step" x="185" y="105">Salvează și partajează</text>
+      <text class="stepText" x="185" y="170">După salvare, la următoarea scanare apare direct versiunea finală.</text>
+      <text class="stepText" x="185" y="226">Perfect pentru meniu digital, prezentare, ofertă sau profil social.</text>
+      <rect x="1240" y="84" width="620" height="340" rx="26" fill="#0f172a" stroke="#22d3ee" stroke-width="2"/>
+      <text class="h2" x="1286" y="165">Rezultat publicat</text>
+      <rect x="1286" y="195" width="530" height="12" rx="6" fill="#334155"/>
+      <rect x="1286" y="226" width="390" height="12" rx="6" fill="#334155"/>
+      <rect x="1286" y="268" width="230" height="58" rx="29" fill="#7c3aed"/>
+      <text class="small" x="1330" y="307" fill="#ffffff">Deschide link</text>
+    </g>
+
+    <g transform="translate(90 2230)" filter="url(#softShadow)">
+      <rect x="0" y="0" width="1960" height="650" rx="38" fill="url(#card)" stroke="#334155" stroke-width="2"/>
+      <circle cx="96" cy="90" r="52" fill="url(#accent)"/>
+      <text class="step" x="78" y="107">4</text>
+      <text class="step" x="185" y="105">Vrei să modifici ulterior?</text>
+      <text class="stepText" x="185" y="170">Apasă butonul „Editează” din colțul dreapta sus.</text>
+      <text class="stepText" x="185" y="226">Introdu codul alfanumeric primit și actualizează conținutul.</text>
+
+      <rect x="185" y="290" width="760" height="144" rx="24" fill="#0f172a" stroke="#38bdf8" stroke-width="2"/>
+      <text class="small" x="230" y="344">Codul tău unic de editare:</text>
+      <text class="code" x="230" y="398">AB12-CD34</text>
+
+      <rect x="1080" y="290" width="780" height="300" rx="24" fill="#0b1324" stroke="#6366f1" stroke-width="2"/>
+      <text class="small" x="1130" y="354">Păstrează codul în siguranță.</text>
+      <text class="small" x="1130" y="408">Cu acest cod poți reveni oricând</text>
+      <text class="small" x="1130" y="462">și modifica pagina QR fără să schimbi</text>
+      <text class="small" x="1130" y="516">codul imprimat.</text>
+    </g>
+
+    <text class="p" x="90" y="3070">Ai nevoie de suport? Contactează-ne și îți personalizăm experiența QR.</text>
+  </g>
+</svg>
