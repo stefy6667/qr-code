@@ -153,6 +153,13 @@ async function renderAdmin() {
               </div>
               <div class="actions" style="margin-top:12px">
                 <button type="button" class="download-qr-btn" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-name="${escapeAttribute(item.slug)}">Download PNG</button>
+                <button type="button" class="secondary template-print-btn" data-template='${escapeAttribute(JSON.stringify({
+                  slug: item.slug,
+                  title: item.title,
+                  editCode: item.editCode,
+                  scanUrl: item.scanUrl,
+                  qrImageUrl: item.qrImageUrl
+                }))}'>Template print</button>
               </div>
             </div>
             <div>
@@ -341,12 +348,126 @@ function downloadPrettyQr(text, styleKey, filename) {
   link.click();
 }
 
+function openPrintTemplateCard(item) {
+  const printWindow = window.open('', '_blank', 'width=980,height=1320');
+  if (!printWindow) {
+    alert('Nu am putut deschide fereastra de print. Verifică pop-up blocker-ul.');
+    return;
+  }
+
+  const htmlTemplate = `<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Template QR - ${escapeHtml(item.slug)}</title>
+  <style>
+    @page { size: A4 portrait; margin: 14mm; }
+    body { margin: 0; font-family: Inter, Arial, sans-serif; background: #f1f5f9; }
+    .sheet {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 0 auto;
+      background: white;
+      padding: 14mm;
+      box-sizing: border-box;
+      display: grid;
+      align-content: center;
+      gap: 18px;
+    }
+    .card {
+      border: 3px solid #0f172a;
+      border-radius: 16px;
+      padding: 22px;
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      gap: 24px;
+      align-items: center;
+    }
+    .qr {
+      width: 240px;
+      height: 240px;
+      border-radius: 14px;
+      border: 1px solid #cbd5e1;
+      background: white;
+      padding: 10px;
+      box-sizing: border-box;
+    }
+    .title { font-size: 28px; font-weight: 800; color: #0f172a; }
+    .desc { font-size: 16px; color: #334155; margin-top: 8px; }
+    .code-wrap { margin-top: 16px; }
+    .code-label { font-size: 14px; color: #334155; text-transform: uppercase; letter-spacing: 0.06em; }
+    .code {
+      margin-top: 6px;
+      font-family: 'JetBrains Mono', Consolas, monospace;
+      font-size: 34px;
+      font-weight: 800;
+      color: #2563eb;
+      border: 2px dashed #93c5fd;
+      border-radius: 12px;
+      padding: 10px 14px;
+      display: inline-block;
+    }
+    .url { margin-top: 16px; font-size: 14px; color: #475569; word-break: break-word; }
+    .cut { border-top: 1px dashed #94a3b8; margin-top: 12px; }
+    .hint { font-size: 13px; color: #64748b; }
+    .actions { margin-top: 8px; display: flex; gap: 10px; }
+    .btn {
+      border: 0; background: #0f172a; color: #fff; padding: 10px 16px; border-radius: 999px; font-weight: 700; cursor: pointer;
+    }
+    .btn.secondary { background: #334155; }
+    @media print {
+      body { background: #fff; }
+      .sheet { margin: 0; padding: 0; min-height: auto; }
+      .actions { display: none; }
+      .card { page-break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <main class="sheet">
+    <div class="card">
+      <img class="qr" src="${item.qrImageUrl}" alt="QR ${escapeHtml(item.slug)}" />
+      <div>
+        <div class="title">${escapeHtml(item.title || 'Cod QR dinamic')}</div>
+        <div class="desc">Scanează codul QR. Pentru re-editare folosește codul alfanumeric de mai jos.</div>
+        <div class="code-wrap">
+          <div class="code-label">Cod unic de editare</div>
+          <div class="code">${escapeHtml(item.editCode)}</div>
+        </div>
+        <div class="url">Link scanare: ${escapeHtml(item.scanUrl)}</div>
+      </div>
+    </div>
+    <div class="cut"></div>
+    <div class="hint">Tipărește această pagină pe A4 și oferă clientului secțiunea cu codul QR + codul de editare.</div>
+    <div class="actions">
+      <button class="btn" onclick="window.print()">Print</button>
+      <button class="btn secondary" onclick="window.close()">Închide</button>
+    </div>
+  </main>
+</body>
+</html>`;
+
+  printWindow.document.open();
+  printWindow.document.write(htmlTemplate);
+  printWindow.document.close();
+}
+
 function renderAdminQrCodes() {
   document.querySelectorAll('.qr-canvas').forEach((canvas) => {
     renderPrettyQr(canvas, canvas.dataset.qrUrl, canvas.dataset.qrStyle, Number(canvas.dataset.qrSize || 170));
   });
   document.querySelectorAll('.download-qr-btn').forEach((button) => {
     button.onclick = () => downloadPrettyQr(button.dataset.qrUrl, button.dataset.qrStyle, button.dataset.qrName || 'qr-code');
+  });
+  document.querySelectorAll('.template-print-btn').forEach((button) => {
+    button.onclick = () => {
+      try {
+        openPrintTemplateCard(JSON.parse(button.dataset.template));
+      } catch (error) {
+        alert('Nu am putut genera template-ul de print.');
+      }
+    };
   });
 }
 
