@@ -103,6 +103,15 @@ def json_response(handler, payload, status=200):
     handler.wfile.write(data)
 
 
+def xml_response(handler, xml: str, status=200):
+    data = xml.encode('utf-8')
+    handler.send_response(status)
+    handler.send_header('Content-Type', 'application/xml; charset=utf-8')
+    handler.send_header('Content-Length', str(len(data)))
+    handler.end_headers()
+    handler.wfile.write(data)
+
+
 def parse_body(handler):
     length = int(handler.headers.get('Content-Length', '0'))
     raw = handler.rfile.read(length) if length else b'{}'
@@ -162,6 +171,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.handle_logout()
         if path == '/api/admin/qr-codes':
             return self.handle_admin_create()
+        if path == '/twilio/voice':
+            return self.handle_twilio_voice()
         if path.startswith('/api/admin/qr/') and path.endswith('/settings'):
             slug = path.split('/')[-2]
             return self.handle_admin_settings(slug)
@@ -279,6 +290,19 @@ class Handler(BaseHTTPRequestHandler):
         conn.commit()
         conn.close()
         json_response(self, {'ok': True, 'slug': slug, 'editCode': edit_code})
+
+    def handle_twilio_voice(self):
+        twiml = (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<Response>'
+            '<Say voice="alice" language="en-US">'
+            'The QR Studio Twilio webhook endpoint is reachable, but voice flow is not configured yet.'
+            '</Say>'
+            '<Pause length="1"/>'
+            '<Say voice="alice" language="en-US">Please contact support to configure your call flow.</Say>'
+            '</Response>'
+        )
+        return xml_response(self, twiml)
 
     def handle_admin_settings(self, slug):
         if not self.require_admin():
