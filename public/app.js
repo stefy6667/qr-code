@@ -160,6 +160,8 @@ async function renderAdmin() {
                   scanUrl: item.scanUrl,
                   qrImageUrl: item.qrImageUrl
                 }))}'>Template print</button>
+                <button type="button" class="secondary tshirt-mockup-btn" data-shirt-color="white" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-name="${escapeAttribute(item.slug)}">Tricou alb</button>
+                <button type="button" class="secondary tshirt-mockup-btn" data-shirt-color="black" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-name="${escapeAttribute(item.slug)}">Tricou negru</button>
               </div>
             </div>
             <div>
@@ -348,6 +350,76 @@ function downloadPrettyQr(text, styleKey, filename) {
   link.click();
 }
 
+
+function createQrCanvasForMockup(url, styleKey, size = 620) {
+  const qrCanvas = document.createElement('canvas');
+  renderPrettyQr(qrCanvas, url, styleKey, size);
+  return qrCanvas;
+}
+
+function drawTshirtSilhouette(ctx, color) {
+  const shirtColor = color === 'black' ? '#0f172a' : '#ffffff';
+  const strokeColor = color === 'black' ? '#334155' : '#cbd5e1';
+  const panelColor = color === 'black' ? '#111827' : '#f8fafc';
+
+  ctx.fillStyle = panelColor;
+  ctx.fillRect(0, 0, 1800, 2200);
+
+  ctx.beginPath();
+  ctx.moveTo(460, 420);
+  ctx.lineTo(370, 560);
+  ctx.lineTo(210, 700);
+  ctx.lineTo(320, 980);
+  ctx.lineTo(450, 900);
+  ctx.lineTo(450, 1840);
+  ctx.lineTo(1350, 1840);
+  ctx.lineTo(1350, 900);
+  ctx.lineTo(1480, 980);
+  ctx.lineTo(1590, 700);
+  ctx.lineTo(1430, 560);
+  ctx.lineTo(1340, 420);
+  ctx.quadraticCurveTo(1170, 360, 900, 360);
+  ctx.quadraticCurveTo(630, 360, 460, 420);
+  ctx.closePath();
+  ctx.fillStyle = shirtColor;
+  ctx.fill();
+  ctx.lineWidth = 10;
+  ctx.strokeStyle = strokeColor;
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(900, 430, 120, 0, Math.PI, true);
+  ctx.strokeStyle = color === 'black' ? '#475569' : '#d1d5db';
+  ctx.lineWidth = 14;
+  ctx.stroke();
+}
+
+function downloadTshirtMockup(url, styleKey, name, shirtColor) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1800;
+  canvas.height = 2200;
+  const ctx = canvas.getContext('2d');
+
+  drawTshirtSilhouette(ctx, shirtColor);
+  const qrCanvas = createQrCanvasForMockup(url, styleKey, 620);
+
+  const qrX = 590;
+  const qrY = 980;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(qrX - 20, qrY - 20, 660, 660);
+  ctx.drawImage(qrCanvas, qrX, qrY, 620, 620);
+
+  ctx.fillStyle = shirtColor === 'black' ? '#e2e8f0' : '#334155';
+  ctx.font = '700 46px Inter, Arial, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('QR pe spatele tricoului', 900, 860);
+
+  const link = document.createElement('a');
+  link.href = canvas.toDataURL('image/png');
+  link.download = `${name}-tricou-${shirtColor}.png`;
+  link.click();
+}
+
 function openPrintTemplateCard(item) {
   const printWindow = window.open('', '_blank', 'width=980,height=1320');
   if (!printWindow) {
@@ -467,6 +539,16 @@ function renderAdminQrCodes() {
       } catch (error) {
         alert('Nu am putut genera template-ul de print.');
       }
+    };
+  });
+  document.querySelectorAll('.tshirt-mockup-btn').forEach((button) => {
+    button.onclick = () => {
+      downloadTshirtMockup(
+        button.dataset.qrUrl,
+        button.dataset.qrStyle,
+        button.dataset.qrName || 'qr-code',
+        button.dataset.shirtColor || 'white'
+      );
     };
   });
 }
