@@ -52,7 +52,8 @@ def init_db():
             reviews_enabled INTEGER NOT NULL DEFAULT 0,
             review_embed_url TEXT,
             review_button_label TEXT,
-            qr_style_preset TEXT NOT NULL DEFAULT 'aurora'
+            qr_style_preset TEXT NOT NULL DEFAULT 'aurora',
+            product_templates_json TEXT
         );
         '''
     )
@@ -65,6 +66,8 @@ def init_db():
         conn.execute("ALTER TABLE qr_codes ADD COLUMN review_button_label TEXT")
     if 'qr_style_preset' not in columns:
         conn.execute("ALTER TABLE qr_codes ADD COLUMN qr_style_preset TEXT NOT NULL DEFAULT 'aurora'")
+    if 'product_templates_json' not in columns:
+        conn.execute("ALTER TABLE qr_codes ADD COLUMN product_templates_json TEXT")
     conn.commit()
     conn.close()
 
@@ -259,6 +262,7 @@ class Handler(BaseHTTPRequestHandler):
         payload = []
         for row in rows:
             content = json.loads(row['content_json']) if row['content_json'] else None
+            product_templates = json.loads(row['product_templates_json']) if row['product_templates_json'] else {}
             payload.append({
                 'id': row['id'],
                 'slug': row['slug'],
@@ -273,6 +277,7 @@ class Handler(BaseHTTPRequestHandler):
                     'buttonLabel': row['review_button_label'] or 'Recenzii Google',
                 },
                 'qrStylePreset': row['qr_style_preset'] or 'aurora',
+                'productTemplates': product_templates,
                 'scanUrl': f'{BASE_URL}/c/{row["slug"]}',
                 'qrImageUrl': f'https://api.qrserver.com/v1/create-qr-code/?size=1200x1200&data={quote(f"{BASE_URL}/c/{row["slug"]}", safe="")}',
             })
@@ -317,16 +322,18 @@ class Handler(BaseHTTPRequestHandler):
         review_embed_url = (body.get('googleReviews', {}).get('embedUrl') or '').strip()
         review_button_label = (body.get('googleReviews', {}).get('buttonLabel') or 'Recenzii Google').strip()
         qr_style_preset = (body.get('qrStylePreset') or 'aurora').strip() or 'aurora'
+        product_templates = body.get('productTemplates') if isinstance(body.get('productTemplates'), dict) else {}
+        product_templates_json = json.dumps(product_templates)
         title = (body.get('title') or '').strip()
         if title:
             conn.execute(
-                'UPDATE qr_codes SET title = ?, reviews_enabled = ?, review_embed_url = ?, review_button_label = ?, qr_style_preset = ?, updated_at = CURRENT_TIMESTAMP WHERE slug = ?',
-                (title, reviews_enabled, review_embed_url, review_button_label, qr_style_preset, slug),
+                'UPDATE qr_codes SET title = ?, reviews_enabled = ?, review_embed_url = ?, review_button_label = ?, qr_style_preset = ?, product_templates_json = ?, updated_at = CURRENT_TIMESTAMP WHERE slug = ?',
+                (title, reviews_enabled, review_embed_url, review_button_label, qr_style_preset, product_templates_json, slug),
             )
         else:
             conn.execute(
-                'UPDATE qr_codes SET reviews_enabled = ?, review_embed_url = ?, review_button_label = ?, qr_style_preset = ?, updated_at = CURRENT_TIMESTAMP WHERE slug = ?',
-                (reviews_enabled, review_embed_url, review_button_label, qr_style_preset, slug),
+                'UPDATE qr_codes SET reviews_enabled = ?, review_embed_url = ?, review_button_label = ?, qr_style_preset = ?, product_templates_json = ?, updated_at = CURRENT_TIMESTAMP WHERE slug = ?',
+                (reviews_enabled, review_embed_url, review_button_label, qr_style_preset, product_templates_json, slug),
             )
         conn.commit()
         conn.close()

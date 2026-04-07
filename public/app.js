@@ -160,10 +160,10 @@ async function renderAdmin() {
                   scanUrl: item.scanUrl,
                   qrImageUrl: item.qrImageUrl
                 }))}'>Template print</button>
-                <button type="button" class="secondary garment-mockup-btn" data-garment="tshirt" data-garment-color="white" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-name="${escapeAttribute(item.slug)}">Tricou alb</button>
-                <button type="button" class="secondary garment-mockup-btn" data-garment="tshirt" data-garment-color="black" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-name="${escapeAttribute(item.slug)}">Tricou negru</button>
-                <button type="button" class="secondary garment-mockup-btn" data-garment="hoodie" data-garment-color="white" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-name="${escapeAttribute(item.slug)}">Hanorac alb</button>
-                <button type="button" class="secondary garment-mockup-btn" data-garment="hoodie" data-garment-color="black" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-name="${escapeAttribute(item.slug)}">Hanorac negru</button>
+                <button type="button" class="secondary garment-mockup-btn" data-garment="tshirt" data-garment-color="white" data-template-image="${escapeAttribute(item.productTemplates?.tshirtWhite || '')}" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-name="${escapeAttribute(item.slug)}">Tricou alb</button>
+                <button type="button" class="secondary garment-mockup-btn" data-garment="tshirt" data-garment-color="black" data-template-image="${escapeAttribute(item.productTemplates?.tshirtBlack || '')}" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-name="${escapeAttribute(item.slug)}">Tricou negru</button>
+                <button type="button" class="secondary garment-mockup-btn" data-garment="hoodie" data-garment-color="white" data-template-image="${escapeAttribute(item.productTemplates?.hoodieWhite || '')}" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-name="${escapeAttribute(item.slug)}">Hanorac alb</button>
+                <button type="button" class="secondary garment-mockup-btn" data-garment="hoodie" data-garment-color="black" data-template-image="${escapeAttribute(item.productTemplates?.hoodieBlack || '')}" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-name="${escapeAttribute(item.slug)}">Hanorac negru</button>
               </div>
             </div>
             <div>
@@ -179,6 +179,15 @@ async function renderAdmin() {
                 <label>Google Embed URL<input name="reviewEmbedUrl" value="${escapeHtml(item.googleReviews?.embedUrl || '')}" placeholder="https://www.google.com/maps/embed?..." /></label>
                 <label>Text buton recenzii<input name="reviewButtonLabel" value="${escapeHtml(item.googleReviews?.buttonLabel || 'Recenzii Google')}" /></label>
                 <label>Stil QR<select name="qrStylePreset">${Object.entries(qrStylePresets).map(([key, preset]) => `<option value="${key}" ${item.qrStylePreset === key ? 'selected' : ''}>${preset.label}</option>`).join('')}</select></label>
+                <label>Template tricou alb (fără cod)<input type="file" name="tplTshirtWhiteFile" accept="image/png,image/jpeg,image/webp" /></label>
+                <label>Template tricou negru (fără cod)<input type="file" name="tplTshirtBlackFile" accept="image/png,image/jpeg,image/webp" /></label>
+                <label>Template hanorac alb (fără cod)<input type="file" name="tplHoodieWhiteFile" accept="image/png,image/jpeg,image/webp" /></label>
+                <label>Template hanorac negru (fără cod)<input type="file" name="tplHoodieBlackFile" accept="image/png,image/jpeg,image/webp" /></label>
+                <input type="hidden" name="tplTshirtWhiteCurrent" value="${escapeHtml(item.productTemplates?.tshirtWhite || '')}" />
+                <input type="hidden" name="tplTshirtBlackCurrent" value="${escapeHtml(item.productTemplates?.tshirtBlack || '')}" />
+                <input type="hidden" name="tplHoodieWhiteCurrent" value="${escapeHtml(item.productTemplates?.hoodieWhite || '')}" />
+                <input type="hidden" name="tplHoodieBlackCurrent" value="${escapeHtml(item.productTemplates?.hoodieBlack || '')}" />
+                <p class="small">Poți încărca pozele reale ale produselor (ca în exemple) pentru mockup-uri mult mai realiste.</p>
                 <div class="actions"><button type="submit" class="secondary">Salvează setările</button></div>
               </form>
             </div>
@@ -201,7 +210,20 @@ async function renderAdmin() {
     form.onsubmit = async (event) => {
       event.preventDefault();
       const formData = new FormData(form);
+      const fileOrCurrent = async (fileKey, currentKey) => {
+        const value = formData.get(fileKey);
+        if (value instanceof File && value.size > 0) {
+          return await getDataUrl(value);
+        }
+        return formData.get(currentKey) || '';
+      };
       try {
+        const productTemplates = {
+          tshirtWhite: await fileOrCurrent('tplTshirtWhiteFile', 'tplTshirtWhiteCurrent'),
+          tshirtBlack: await fileOrCurrent('tplTshirtBlackFile', 'tplTshirtBlackCurrent'),
+          hoodieWhite: await fileOrCurrent('tplHoodieWhiteFile', 'tplHoodieWhiteCurrent'),
+          hoodieBlack: await fileOrCurrent('tplHoodieBlackFile', 'tplHoodieBlackCurrent'),
+        };
         await api(`/api/admin/qr/${form.dataset.slug}/settings`, {
           method: 'POST',
           body: JSON.stringify({
@@ -211,7 +233,8 @@ async function renderAdmin() {
               embedUrl: formData.get('reviewEmbedUrl'),
               buttonLabel: formData.get('reviewButtonLabel'),
             },
-            qrStylePreset: formData.get('qrStylePreset')
+            qrStylePreset: formData.get('qrStylePreset'),
+            productTemplates
           })
         });
         route();
@@ -534,23 +557,54 @@ function drawHoodieBody(ctx, palette) {
   ctx.strokeRect(730, 1540, 340, 130);
 }
 
-function downloadGarmentMockup(url, styleKey, name, garment, color) {
+function loadImage(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+async function downloadGarmentMockup(url, styleKey, name, garment, color, templateImage) {
   const canvas = document.createElement('canvas');
   canvas.width = 1800;
   canvas.height = 2200;
   const ctx = canvas.getContext('2d');
   const palette = garmentColors(color);
 
-  drawStudioBackdrop(ctx, palette);
-  if (garment === 'hoodie') {
-    drawHoodieBody(ctx, palette);
+  const hasTemplateImage = Boolean(templateImage);
+  if (hasTemplateImage) {
+    try {
+      const productImage = await loadImage(templateImage);
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillRect(0, 0, 1800, 2200);
+      const scale = Math.min(1600 / productImage.width, 1900 / productImage.height);
+      const w = productImage.width * scale;
+      const h = productImage.height * scale;
+      const x = (1800 - w) / 2;
+      const y = (2200 - h) / 2;
+      ctx.drawImage(productImage, x, y, w, h);
+      ctx.fillStyle = 'rgba(2,6,23,0.18)';
+      ctx.beginPath();
+      ctx.ellipse(900, y + h - 10, 440, 88, 0, 0, Math.PI * 2);
+      ctx.fill();
+    } catch (error) {
+      drawStudioBackdrop(ctx, palette);
+      if (garment === 'hoodie') drawHoodieBody(ctx, palette); else drawTshirtBody(ctx, palette);
+    }
   } else {
-    drawTshirtBody(ctx, palette);
+    drawStudioBackdrop(ctx, palette);
+    if (garment === 'hoodie') {
+      drawHoodieBody(ctx, palette);
+    } else {
+      drawTshirtBody(ctx, palette);
+    }
   }
 
   const qrCanvas = createQrCanvasForMockup(url, styleKey, 620);
   const qrX = 590;
-  const qrY = 980;
+  const qrY = garment === 'hoodie' ? 900 : 950;
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(qrX - 24, qrY - 24, 668, 668);
   ctx.drawImage(qrCanvas, qrX, qrY, 620, 620);
@@ -688,13 +742,14 @@ function renderAdminQrCodes() {
     };
   });
   document.querySelectorAll('.garment-mockup-btn').forEach((button) => {
-    button.onclick = () => {
-      downloadGarmentMockup(
+    button.onclick = async () => {
+      await downloadGarmentMockup(
         button.dataset.qrUrl,
         button.dataset.qrStyle,
         button.dataset.qrName || 'qr-code',
         button.dataset.garment || 'tshirt',
-        button.dataset.garmentColor || 'white'
+        button.dataset.garmentColor || 'white',
+        button.dataset.templateImage || ''
       );
     };
   });
