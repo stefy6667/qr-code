@@ -35,3 +35,13 @@ python3 server.py
 ## Observație QR
 
 PNG-ul QR este livrat prin serviciul extern `api.qrserver.com`, folosind URL-ul public din `BASE_URL`.
+
+## Export arhivă mockup produse
+
+Pentru a genera rapid o arhivă cu mockup-uri pentru toate codurile din baza de date (tricou/hanorac alb+negru):
+
+```bash
+python3 scripts/export_mockup_archive.py
+```
+
+Scriptul creează un fișier ZIP în `artifacts/` cu SVG-uri pentru fiecare cod QR și un `manifest.csv`.
