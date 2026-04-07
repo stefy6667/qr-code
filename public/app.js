@@ -160,8 +160,10 @@ async function renderAdmin() {
                   scanUrl: item.scanUrl,
                   qrImageUrl: item.qrImageUrl
                 }))}'>Template print</button>
-                <button type="button" class="secondary tshirt-mockup-btn" data-shirt-color="white" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-name="${escapeAttribute(item.slug)}">Tricou alb</button>
-                <button type="button" class="secondary tshirt-mockup-btn" data-shirt-color="black" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-name="${escapeAttribute(item.slug)}">Tricou negru</button>
+                <button type="button" class="secondary garment-mockup-btn" data-garment="tshirt" data-garment-color="white" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-name="${escapeAttribute(item.slug)}">Tricou alb</button>
+                <button type="button" class="secondary garment-mockup-btn" data-garment="tshirt" data-garment-color="black" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-name="${escapeAttribute(item.slug)}">Tricou negru</button>
+                <button type="button" class="secondary garment-mockup-btn" data-garment="hoodie" data-garment-color="white" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-name="${escapeAttribute(item.slug)}">Hanorac alb</button>
+                <button type="button" class="secondary garment-mockup-btn" data-garment="hoodie" data-garment-color="black" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-name="${escapeAttribute(item.slug)}">Hanorac negru</button>
               </div>
             </div>
             <div>
@@ -357,66 +359,163 @@ function createQrCanvasForMockup(url, styleKey, size = 620) {
   return qrCanvas;
 }
 
-function drawTshirtSilhouette(ctx, color) {
-  const shirtColor = color === 'black' ? '#0f172a' : '#ffffff';
-  const strokeColor = color === 'black' ? '#334155' : '#cbd5e1';
-  const panelColor = color === 'black' ? '#111827' : '#f8fafc';
+function garmentColors(color) {
+  if (color === 'black') {
+    return {
+      garment: '#0f172a',
+      stroke: '#1e293b',
+      highlight: '#334155',
+      shadow: 'rgba(2,6,23,0.55)',
+      bgTop: '#0b1020',
+      bgBottom: '#111827',
+      text: '#e2e8f0'
+    };
+  }
+  return {
+    garment: '#f8fafc',
+    stroke: '#cbd5e1',
+    highlight: '#ffffff',
+    shadow: 'rgba(15,23,42,0.2)',
+    bgTop: '#e2e8f0',
+    bgBottom: '#f8fafc',
+    text: '#334155'
+  };
+}
 
-  ctx.fillStyle = panelColor;
+function drawStudioBackdrop(ctx, palette) {
+  const gradient = ctx.createLinearGradient(0, 0, 0, 2200);
+  gradient.addColorStop(0, palette.bgTop);
+  gradient.addColorStop(1, palette.bgBottom);
+  ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, 1800, 2200);
 
+  ctx.fillStyle = 'rgba(148,163,184,0.18)';
   ctx.beginPath();
-  ctx.moveTo(460, 420);
-  ctx.lineTo(370, 560);
-  ctx.lineTo(210, 700);
-  ctx.lineTo(320, 980);
-  ctx.lineTo(450, 900);
-  ctx.lineTo(450, 1840);
-  ctx.lineTo(1350, 1840);
-  ctx.lineTo(1350, 900);
-  ctx.lineTo(1480, 980);
-  ctx.lineTo(1590, 700);
-  ctx.lineTo(1430, 560);
-  ctx.lineTo(1340, 420);
-  ctx.quadraticCurveTo(1170, 360, 900, 360);
-  ctx.quadraticCurveTo(630, 360, 460, 420);
-  ctx.closePath();
-  ctx.fillStyle = shirtColor;
+  ctx.ellipse(900, 1940, 560, 120, 0, 0, Math.PI * 2);
   ctx.fill();
-  ctx.lineWidth = 10;
-  ctx.strokeStyle = strokeColor;
-  ctx.stroke();
+}
+
+function drawTshirtBody(ctx, palette) {
+  ctx.save();
+  ctx.shadowColor = palette.shadow;
+  ctx.shadowBlur = 28;
+  ctx.shadowOffsetY = 18;
 
   ctx.beginPath();
-  ctx.arc(900, 430, 120, 0, Math.PI, true);
-  ctx.strokeStyle = color === 'black' ? '#475569' : '#d1d5db';
-  ctx.lineWidth = 14;
+  ctx.moveTo(420, 430);
+  ctx.lineTo(310, 620);
+  ctx.lineTo(200, 780);
+  ctx.lineTo(300, 1040);
+  ctx.lineTo(448, 930);
+  ctx.lineTo(460, 1850);
+  ctx.lineTo(1340, 1850);
+  ctx.lineTo(1352, 930);
+  ctx.lineTo(1500, 1040);
+  ctx.lineTo(1600, 780);
+  ctx.lineTo(1490, 620);
+  ctx.lineTo(1380, 430);
+  ctx.quadraticCurveTo(1170, 330, 900, 330);
+  ctx.quadraticCurveTo(630, 330, 420, 430);
+  ctx.closePath();
+  ctx.fillStyle = palette.garment;
+  ctx.fill();
+  ctx.lineWidth = 8;
+  ctx.strokeStyle = palette.stroke;
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.strokeStyle = palette.highlight;
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.arc(900, 430, 130, Math.PI, 0);
   ctx.stroke();
 }
 
-function downloadTshirtMockup(url, styleKey, name, shirtColor) {
+function drawHoodieBody(ctx, palette) {
+  ctx.save();
+  ctx.shadowColor = palette.shadow;
+  ctx.shadowBlur = 30;
+  ctx.shadowOffsetY = 18;
+
+  ctx.beginPath();
+  ctx.moveTo(500, 420);
+  ctx.lineTo(360, 620);
+  ctx.lineTo(220, 830);
+  ctx.lineTo(350, 1100);
+  ctx.lineTo(500, 980);
+  ctx.lineTo(520, 1870);
+  ctx.lineTo(1280, 1870);
+  ctx.lineTo(1300, 980);
+  ctx.lineTo(1450, 1100);
+  ctx.lineTo(1580, 830);
+  ctx.lineTo(1440, 620);
+  ctx.lineTo(1300, 420);
+  ctx.quadraticCurveTo(1120, 350, 900, 350);
+  ctx.quadraticCurveTo(680, 350, 500, 420);
+  ctx.closePath();
+  ctx.fillStyle = palette.garment;
+  ctx.fill();
+  ctx.lineWidth = 8;
+  ctx.strokeStyle = palette.stroke;
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.beginPath();
+  ctx.moveTo(700, 470);
+  ctx.quadraticCurveTo(900, 260, 1100, 470);
+  ctx.quadraticCurveTo(900, 600, 700, 470);
+  ctx.closePath();
+  ctx.fillStyle = palette.garment;
+  ctx.fill();
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = palette.stroke;
+  ctx.stroke();
+
+  ctx.strokeStyle = palette.highlight;
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(870, 510);
+  ctx.lineTo(845, 690);
+  ctx.moveTo(930, 510);
+  ctx.lineTo(955, 690);
+  ctx.stroke();
+
+  ctx.fillStyle = palette.highlight;
+  ctx.fillRect(730, 1540, 340, 130);
+  ctx.strokeStyle = palette.stroke;
+  ctx.lineWidth = 5;
+  ctx.strokeRect(730, 1540, 340, 130);
+}
+
+function downloadGarmentMockup(url, styleKey, name, garment, color) {
   const canvas = document.createElement('canvas');
   canvas.width = 1800;
   canvas.height = 2200;
   const ctx = canvas.getContext('2d');
+  const palette = garmentColors(color);
 
-  drawTshirtSilhouette(ctx, shirtColor);
+  drawStudioBackdrop(ctx, palette);
+  if (garment === 'hoodie') {
+    drawHoodieBody(ctx, palette);
+  } else {
+    drawTshirtBody(ctx, palette);
+  }
+
   const qrCanvas = createQrCanvasForMockup(url, styleKey, 620);
-
   const qrX = 590;
   const qrY = 980;
   ctx.fillStyle = '#ffffff';
-  ctx.fillRect(qrX - 20, qrY - 20, 660, 660);
+  ctx.fillRect(qrX - 24, qrY - 24, 668, 668);
   ctx.drawImage(qrCanvas, qrX, qrY, 620, 620);
 
-  ctx.fillStyle = shirtColor === 'black' ? '#e2e8f0' : '#334155';
-  ctx.font = '700 46px Inter, Arial, sans-serif';
+  ctx.fillStyle = palette.text;
+  ctx.font = '700 44px Inter, Arial, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('QR pe spatele tricoului', 900, 860);
+  ctx.fillText(garment === 'hoodie' ? 'QR pe spatele hanoracului' : 'QR pe spatele tricoului', 900, 900);
 
   const link = document.createElement('a');
   link.href = canvas.toDataURL('image/png');
-  link.download = `${name}-tricou-${shirtColor}.png`;
+  link.download = `${name}-${garment}-${color}.png`;
   link.click();
 }
 
@@ -541,13 +640,14 @@ function renderAdminQrCodes() {
       }
     };
   });
-  document.querySelectorAll('.tshirt-mockup-btn').forEach((button) => {
+  document.querySelectorAll('.garment-mockup-btn').forEach((button) => {
     button.onclick = () => {
-      downloadTshirtMockup(
+      downloadGarmentMockup(
         button.dataset.qrUrl,
         button.dataset.qrStyle,
         button.dataset.qrName || 'qr-code',
-        button.dataset.shirtColor || 'white'
+        button.dataset.garment || 'tshirt',
+        button.dataset.garmentColor || 'white'
       );
     };
   });
