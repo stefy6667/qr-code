@@ -37,10 +37,6 @@ python3 server.py
 
 PNG-ul QR este livrat prin serviciul extern `api.qrserver.com`, folosind URL-ul public din `BASE_URL`.
 
-## Editare client
-
-Pagina publică de acces editare este `/edit` și solicită doar **codul alfanumeric de editare** (fără slug). După validare, utilizatorul este redirecționat automat la formularul QR corespunzător.
-
 ## Export arhivă mockup produse
 
 Pentru a genera rapid o arhivă cu mockup-uri pentru toate codurile din baza de date (tricou/hanorac alb+negru):
