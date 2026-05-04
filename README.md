@@ -22,6 +22,7 @@ python3 server.py
 - `DATA_ROOT` - directorul persistent pentru baza de date și fișiere uploadate; implicit este `./data` local și trebuie setat pe Render la `/var/data`
 - `DB_PATH` - opțional, cale explicită pentru fișierul SQLite
 - `UPLOAD_DIR` - opțional, cale explicită pentru fișierele media
+- `PYTHON_VERSION` - recomandat pe Render: `3.11.9` (evită incompatibilități de runtime)
 
 ## Deploy pe Render
 

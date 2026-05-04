@@ -10,6 +10,8 @@ services:
       mountPath: /var/data
       sizeGB: 1
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
       - key: BASE_URL
         sync: false
       - key: ADMIN_USERNAME

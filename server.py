@@ -7,6 +7,7 @@ import os
 import secrets
 import sqlite3
 import sys
+from typing import Optional
 from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -77,7 +78,7 @@ def sign_value(value: str) -> str:
     return f'{value}.{sig}'
 
 
-def verify_signed_value(value: str | None) -> str | None:
+def verify_signed_value(value: Optional[str]) -> Optional[str]:
     if not value or '.' not in value:
         return None
     raw, sig = value.rsplit('.', 1)
