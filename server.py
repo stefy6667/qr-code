@@ -208,8 +208,6 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith('/api/admin/qr/') and path.endswith('/settings'):
             slug = path.split('/')[-2]
             return self.handle_admin_settings(slug)
-        if path == '/api/public/resolve-edit-code':
-            return self.handle_resolve_edit_code()
         if path.startswith('/api/public/qr/') and path.endswith('/verify-edit-code'):
             slug = path.split('/')[-2]
             return self.handle_public_verify(slug)
@@ -389,18 +387,6 @@ class Handler(BaseHTTPRequestHandler):
                 'buttonLabel': row['review_button_label'] or 'Recenzii Google',
             },
         })
-
-    def handle_resolve_edit_code(self):
-        body = parse_body(self)
-        supplied_code = (body.get('editCode') or '').strip().upper()
-        if not supplied_code:
-            return json_response(self, {'error': 'Codul de editare este obligatoriu.'}, 400)
-        conn = db()
-        row = conn.execute('SELECT slug FROM qr_codes WHERE edit_code = ?', (supplied_code,)).fetchone()
-        conn.close()
-        if not row:
-            return json_response(self, {'error': 'Codul de editare este invalid.'}, 403)
-        return json_response(self, {'ok': True, 'slug': row['slug']})
 
     def handle_public_verify(self, slug):
         body = parse_body(self)
