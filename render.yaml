@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: qr-studio
+    env: python
+    plan: starter
+    buildCommand: chmod +x server.py
+    startCommand: python3 server.py
+    disk:
+      name: qr-studio-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: BASE_URL
+        sync: false
+      - key: ADMIN_USERNAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: DATA_ROOT
+        value: /var/data
