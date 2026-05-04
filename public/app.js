@@ -116,9 +116,6 @@ async function renderEditAccess() {
         <h2>Intră în modul de editare</h2>
         <p class="small">Introdu doar codul alfanumeric primit. După validare vei fi redirecționat automat la formularul de editare.</p>
         <form id="editAccessForm">
-        <p class="small">Introdu slug-ul QR și codul alfanumeric primit. După validare vei fi redirecționat automat la formularul de editare.</p>
-        <form id="editAccessForm">
-          <label>Slug QR<input name="slug" placeholder="ex: a1b2c3d4" required /></label>
           <label>Cod editare<input name="editCode" placeholder="ex: AB12CD34" required /></label>
           <div class="actions"><button type="submit">Continuă</button></div>
           <p id="editAccessError" class="small" style="color:#ef4444;"></p>
@@ -145,20 +142,6 @@ async function renderEditAccess() {
       });
       if (result.ok && result.slug) {
         const slug = String(result.slug).toLowerCase();
-    const slug = String(formData.get('slug') || '').trim().toLowerCase();
-    const editCode = String(formData.get('editCode') || '').trim().toUpperCase();
-    const errorNode = document.getElementById('editAccessError');
-    errorNode.textContent = '';
-    if (!slug || !editCode) {
-      errorNode.textContent = 'Slug-ul și codul de editare sunt obligatorii.';
-      return;
-    }
-    try {
-      const result = await api(`/api/public/qr/${slug}/verify-edit-code`, {
-        method: 'POST',
-        body: JSON.stringify({ editCode })
-      });
-      if (result.ok) {
         setStoredEditCode(slug, editCode);
         location.assign(`/c/${slug}?edit=1`);
       }
