@@ -373,9 +373,9 @@ function getDefaultContent(data) {
     body: '',
     buttonLabel: 'Editează cu codul unic',
     theme: {
-      background: '#0f172a',
+      background: '#171717',
       foreground: '#f8fafc',
-      accent: '#38bdf8',
+      accent: '#9ca3af',
       fontFamily: fonts[0],
       textAlign: 'left'
     },
@@ -862,7 +862,7 @@ function previewMarkup(content, label = 'Previzualizare live', options = {}) {
     ${body ? `<p>${escapeHtml(body)}</p>` : (usePlaceholders ? '<p>Aici va apărea descrierea, oferta sau mesajul personalizat.</p>' : '')}
     ${hasImage ? `<img src="${escapeAttribute(content.imageUrl)}" alt="vizual" style="${mediaStyle}" />` : ''}
     ${hasVideo ? `<video src="${escapeAttribute(content.videoUrl)}" controls style="${mediaStyle}"></video>` : ''}
-    ${showButton && buttonLabel ? `<button type="button" style="width:max-content;background:linear-gradient(135deg, ${content.theme.accent}, #2563eb)">${escapeHtml(buttonLabel)}</button>` : ''}
+    ${showButton && buttonLabel ? `<button type="button" style="width:max-content;background:linear-gradient(135deg, ${content.theme.accent}, #6b7280)">${escapeHtml(buttonLabel)}</button>` : ''}
     ${actionLink ? `<a href="${escapeAttribute(actionLink.url)}" target="_blank" rel="noopener noreferrer" class="platform-link-btn platform-${escapeAttribute(actionLink.platform)}" style="--accent:${content.theme.accent};">${escapeHtml(actionLink.label)}</a>` : ''}
     ${reviewsEnabled ? html`
       <div class="google-reviews-block">
@@ -911,8 +911,8 @@ async function renderPublicEditor(slug, data) {
           <p class="small">După salvare, formularul dispare la scanările viitoare și se va afișa doar versiunea publicată.</p>
           <form id="editorForm">
             ${data.hasContent ? `<div class="small" style="margin-bottom:16px;">Cod validat: <span class="code">${escapeHtml(storedCode)}</span></div>` : ''}
-            <label>Titlu principal<input name="headline" value="${escapeHtml(content.headline || '')}" placeholder="Ex: Meniul video al locației" /></label>
-            <label>Text descriptiv<textarea name="body" placeholder="Descriere / mesaj pentru client">${escapeHtml(content.body || '')}</textarea></label>
+            <label>Link extern (platformă)<input name="actionLinkUrl" value="${escapeHtml(content.actionLink?.url || '')}" placeholder="https://instagram.com/..." /></label>
+            <label>Text buton link (opțional)<input name="actionLinkLabel" value="${escapeHtml(content.actionLink?.label || '')}" placeholder="Ex: Urmărește-ne pe Instagram" /></label>
             <label>Eticheta butonului de re-editare<input name="buttonLabel" value="${escapeHtml(content.buttonLabel || '')}" /></label>
             <div class="grid grid-2">
               <label>Culoare fundal<input type="color" name="background" value="${content.theme.background}" /></label>
@@ -928,8 +928,6 @@ async function renderPublicEditor(slug, data) {
               <label>Video (upload)<input type="file" name="videoFile" accept="video/mp4,video/webm" /></label>
               <label>URL imagine alternativ<input name="imageUrl" value="${escapeHtml(content.imageUrl || '')}" placeholder="https://..." /></label>
               <label>URL video alternativ<input name="videoUrl" value="${escapeHtml(content.videoUrl || '')}" placeholder="https://..." /></label>
-              <label>Link extern (opțional)<input name="actionLinkUrl" value="${escapeHtml(content.actionLink?.url || '')}" placeholder="https://instagram.com/..." /></label>
-              <label>Text buton link (opțional)<input name="actionLinkLabel" value="${escapeHtml(content.actionLink?.label || '')}" placeholder="Ex: Urmărește-ne pe Instagram" /></label>
             </div>
             <div class="actions">
               <button type="submit">Salvează experiența</button>
@@ -949,8 +947,8 @@ async function renderPublicEditor(slug, data) {
   const updatePreview = () => {
     const formData = new FormData(form);
     const previewContent = {
-      headline: formData.get('headline'),
-      body: formData.get('body'),
+      headline: '',
+      body: '',
       buttonLabel: formData.get('buttonLabel'),
       imageUrl: formData.get('imageUrl') || content.imageUrl,
       videoUrl: formData.get('videoUrl') || content.videoUrl,
@@ -967,7 +965,7 @@ async function renderPublicEditor(slug, data) {
     preview.style.color = previewContent.theme.foreground;
     preview.style.fontFamily = previewContent.theme.fontFamily;
     preview.style.textAlign = previewContent.theme.textAlign;
-    preview.innerHTML = previewMarkup(previewContent, 'Previzualizare live', { showButton: Boolean(previewContent.buttonLabel), usePlaceholders: true });
+    preview.innerHTML = previewMarkup(previewContent, 'Previzualizare live', { showButton: Boolean(previewContent.buttonLabel), usePlaceholders: false });
   };
 
   form.oninput = updatePreview;
@@ -978,8 +976,8 @@ async function renderPublicEditor(slug, data) {
     const formData = new FormData(form);
     const payload = {
       editCode: storedCode,
-      headline: formData.get('headline'),
-      body: formData.get('body'),
+      headline: '',
+      body: '',
       buttonLabel: formData.get('buttonLabel'),
       imageUrl: formData.get('imageUrl'),
       videoUrl: formData.get('videoUrl'),
