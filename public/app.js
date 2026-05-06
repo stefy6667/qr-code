@@ -913,17 +913,7 @@ async function renderPublicEditor(slug, data) {
             ${data.hasContent ? `<div class="small" style="margin-bottom:16px;">Cod validat: <span class="code">${escapeHtml(storedCode)}</span></div>` : ''}
             <label>Link extern (platformă)<input name="actionLinkUrl" value="${escapeHtml(content.actionLink?.url || '')}" placeholder="https://instagram.com/..." /></label>
             <label>Text buton link (opțional)<input name="actionLinkLabel" value="${escapeHtml(content.actionLink?.label || '')}" placeholder="Ex: Urmărește-ne pe Instagram" /></label>
-            <label>Eticheta butonului de re-editare<input name="buttonLabel" value="${escapeHtml(content.buttonLabel || '')}" /></label>
             <div class="grid grid-2">
-              <label>Culoare fundal<input type="color" name="background" value="${content.theme.background}" /></label>
-              <label>Culoare text<input type="color" name="foreground" value="${content.theme.foreground}" /></label>
-              <label>Culoare accent<input type="color" name="accent" value="${content.theme.accent}" /></label>
-              <label>Aliniere text<select name="textAlign">
-                ${['left', 'center', 'right'].map(opt => `<option value="${opt}" ${content.theme.textAlign === opt ? 'selected' : ''}>${opt}</option>`).join('')}
-              </select></label>
-              <label>Font<select name="fontFamily">
-                ${fonts.map(font => `<option value="${font}" ${content.theme.fontFamily === font ? 'selected' : ''}>${font}</option>`).join('')}
-              </select></label>
               <label>Imagine (upload)<input type="file" name="imageFile" accept="image/png,image/jpeg,image/webp" /></label>
               <label>Video (upload)<input type="file" name="videoFile" accept="video/mp4,video/webm" /></label>
               <label>URL imagine alternativ<input name="imageUrl" value="${escapeHtml(content.imageUrl || '')}" placeholder="https://..." /></label>
@@ -949,23 +939,17 @@ async function renderPublicEditor(slug, data) {
     const previewContent = {
       headline: '',
       body: '',
-      buttonLabel: formData.get('buttonLabel'),
+      buttonLabel: '',
       imageUrl: formData.get('imageUrl') || content.imageUrl,
       videoUrl: formData.get('videoUrl') || content.videoUrl,
       actionLink: normalizeActionLink(formData.get('actionLinkUrl'), formData.get('actionLinkLabel')),
-      theme: {
-        background: formData.get('background'),
-        foreground: formData.get('foreground'),
-        accent: formData.get('accent'),
-        textAlign: formData.get('textAlign'),
-        fontFamily: formData.get('fontFamily')
-      }
+      theme: content.theme
     };
     preview.style.background = previewContent.theme.background;
     preview.style.color = previewContent.theme.foreground;
     preview.style.fontFamily = previewContent.theme.fontFamily;
     preview.style.textAlign = previewContent.theme.textAlign;
-    preview.innerHTML = previewMarkup(previewContent, 'Previzualizare live', { showButton: Boolean(previewContent.buttonLabel), usePlaceholders: false });
+    preview.innerHTML = previewMarkup(previewContent, 'Previzualizare live', { showButton: false, usePlaceholders: false });
   };
 
   form.oninput = updatePreview;
@@ -978,19 +962,13 @@ async function renderPublicEditor(slug, data) {
       editCode: storedCode,
       headline: '',
       body: '',
-      buttonLabel: formData.get('buttonLabel'),
+      buttonLabel: '',
       imageUrl: formData.get('imageUrl'),
       videoUrl: formData.get('videoUrl'),
       actionLink: normalizeActionLink(formData.get('actionLinkUrl'), formData.get('actionLinkLabel')),
       imageDataUrl: await getDataUrl(state.selectedFileImage),
       videoDataUrl: await getDataUrl(state.selectedFileVideo),
-      theme: {
-        background: formData.get('background'),
-        foreground: formData.get('foreground'),
-        accent: formData.get('accent'),
-        textAlign: formData.get('textAlign'),
-        fontFamily: formData.get('fontFamily'),
-      }
+      theme: content.theme
     };
     try {
       await api(`/api/public/qr/${slug}/save`, { method: 'POST', body: JSON.stringify(payload) });
