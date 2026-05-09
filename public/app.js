@@ -908,6 +908,10 @@ async function renderPublicEditor(slug, data) {
       <div class="grid grid-2">
         <div class="card">
           <h2>${data.hasContent ? 'Editează conținutul existent' : 'Configurează conținutul la prima scanare'}</h2>
+          <div class="scan-counter" aria-label="Număr scanări QR">
+            <span>Scanări totale</span>
+            <strong>${Number(data.scanCount || 0).toLocaleString('ro-RO')}</strong>
+          </div>
           <p class="small">După salvare, formularul dispare la scanările viitoare și se va afișa doar versiunea publicată.</p>
           <form id="editorForm">
             ${data.hasContent ? `<div class="small" style="margin-bottom:16px;">Cod validat: <span class="code">${escapeHtml(storedCode)}</span></div>` : ''}

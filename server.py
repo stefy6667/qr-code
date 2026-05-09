@@ -54,7 +54,8 @@ def init_db():
             review_embed_url TEXT,
             review_button_label TEXT,
             qr_style_preset TEXT NOT NULL DEFAULT 'aurora',
-            product_templates_json TEXT
+            product_templates_json TEXT,
+            scan_count INTEGER NOT NULL DEFAULT 0
         );
         '''
     )
@@ -69,6 +70,8 @@ def init_db():
         conn.execute("ALTER TABLE qr_codes ADD COLUMN qr_style_preset TEXT NOT NULL DEFAULT 'aurora'")
     if 'product_templates_json' not in columns:
         conn.execute("ALTER TABLE qr_codes ADD COLUMN product_templates_json TEXT")
+    if 'scan_count' not in columns:
+        conn.execute("ALTER TABLE qr_codes ADD COLUMN scan_count INTEGER NOT NULL DEFAULT 0")
     conn.commit()
     conn.close()
 
@@ -127,6 +130,13 @@ def parse_body(handler):
         return {}
 
 
+def increment_scan_count(slug):
+    conn = db()
+    conn.execute('UPDATE qr_codes SET scan_count = scan_count + 1 WHERE slug = ?', (slug,))
+    conn.commit()
+    conn.close()
+
+
 def save_data_url(data_url: str):
     if not data_url or not data_url.startswith('data:'):
         return None
@@ -172,6 +182,7 @@ class Handler(BaseHTTPRequestHandler):
                 params = parse_qs(parsed.query)
                 if params.get('edit') == ['1']:
                     return self.serve_file(PUBLIC_DIR / 'index.html', content_type='text/html; charset=utf-8')
+            increment_scan_count(slug)
             conn = db()
             row = conn.execute('SELECT content_json FROM qr_codes WHERE slug = ?', (slug,)).fetchone()
             conn.close()
@@ -311,6 +322,7 @@ class Handler(BaseHTTPRequestHandler):
                 },
                 'qrStylePreset': row['qr_style_preset'] or 'aurora',
                 'productTemplates': product_templates,
+                'scanCount': row['scan_count'] or 0,
                 'scanUrl': f'{BASE_URL}/c/{row["slug"]}',
                 'qrImageUrl': f'https://api.qrserver.com/v1/create-qr-code/?size=1200x1200&data={quote(f"{BASE_URL}/c/{row["slug"]}", safe="")}',
             })
@@ -383,6 +395,7 @@ class Handler(BaseHTTPRequestHandler):
             'slug': row['slug'],
             'title': row['title'],
             'editCodeHint': row['edit_code'][-3:],
+            'scanCount': row['scan_count'] or 0,
             'hasContent': bool(content),
             'content': content,
             'googleReviews': {
