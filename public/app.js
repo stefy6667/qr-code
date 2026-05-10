@@ -99,13 +99,15 @@ async function getDataUrl(file) {
   });
 }
 
+const ADMIN_ROUTE = '/private-admin';
+
 function route() {
   const path = location.pathname;
   if (path.startsWith('/c/')) return renderPublic(path.split('/').pop());
   if (path === '/top-voting' || path.startsWith('/top-voting/')) return renderTopVoting();
   if (path === '/edit' || path.startsWith('/edit/')) return renderEditAccess();
-  if (path.startsWith('/admin')) return renderAdmin();
-  return renderLanding();
+  if (path === ADMIN_ROUTE || path.startsWith(`${ADMIN_ROUTE}/`)) return renderAdmin();
+  return renderEditAccess();
 }
 
 
@@ -159,7 +161,7 @@ function renderLanding() {
       <h1>Generezi un QR, clientul îl personalizează și îl poate actualiza ulterior cu un cod unic.</h1>
       <p>Aplicația este gândită pentru workflow-ul tău: doar tu creezi și descarci coduri PNG, iar clientul vede conținutul salvat la scanare și intră în editare doar cu codul unic.</p>
       <div class="actions">
-        <a href="/admin"><button>Intră în dashboard</button></a>
+        <a href="/edit"><button>Intră în editare</button></a>
       </div>
     </section>
   `;
@@ -369,7 +371,7 @@ async function requestEditAccess(slug) {
 }
 
 function getDefaultContent(data) {
-  return data.content || {
+  const defaults = {
     headline: '',
     body: '',
     buttonLabel: 'Editează cu codul unic',
@@ -383,12 +385,20 @@ function getDefaultContent(data) {
     imageUrl: '',
     videoUrl: '',
     actionLink: null,
+    votingEligible: false,
     textStyle: {
       color: '#f8fafc',
       fontSize: '20',
       fontFamily: fonts[0],
       textAlign: 'left'
     }
+  };
+  const current = data.content || {};
+  return {
+    ...defaults,
+    ...current,
+    theme: { ...defaults.theme, ...(current.theme || {}) },
+    textStyle: { ...defaults.textStyle, ...(current.textStyle || {}) }
   };
 }
 
@@ -906,8 +916,12 @@ async function renderTopVoting() {
         <div class="top-voting-list">
           ${(data.items || []).map((item, index) => html`
             <a class="top-voting-item" href="/c/${escapeAttribute(item.slug)}">
-              <strong>#${index + 1} ${escapeHtml(item.title || item.slug)}</strong>
-              <span>${escapeHtml(item.text || 'Conținut QR')}</span>
+              <div class="top-voting-rank">#${index + 1}</div>
+              <div class="top-voting-preview">
+                ${item.imageUrl ? `<img src="${escapeAttribute(item.imageUrl)}" alt="preview" />` : ''}
+                ${!item.imageUrl && item.videoUrl ? `<video src="${escapeAttribute(item.videoUrl)}" muted playsinline></video>` : ''}
+                ${item.text ? `<p>${escapeHtml(item.text)}</p>` : (!item.imageUrl && !item.videoUrl ? '<p>Conținut media</p>' : '')}
+              </div>
               <small>👍 ${item.likeCount || 0} · 👎 ${item.dislikeCount || 0} · Scanări ${item.scanCount || 0}</small>
             </a>
           `).join('') || '<p class="small">Nu există încă voturi.</p>'}
@@ -944,7 +958,6 @@ function previewMarkup(content, label = 'Previzualizare live', options = {}) {
     ` : ''}
     ${voting ? html`
       <div class="vote-box">
-        <p class="small">Votează acest conținut</p>
         <div class="vote-actions">
           <button type="button" class="vote-btn" data-vote="like">👍 Like <span id="likeCount">${voting.likeCount || 0}</span></button>
           <button type="button" class="vote-btn secondary" data-vote="dislike">👎 Dislike <span id="dislikeCount">${voting.dislikeCount || 0}</span></button>
@@ -981,7 +994,7 @@ function renderPublicView(slug, data) {
     usePlaceholders: false,
     showLabel: false,
     googleReviews: data.googleReviews,
-    voting: { likeCount: data.likeCount || 0, dislikeCount: data.dislikeCount || 0 }
+    voting: data.votingEligible ? { likeCount: data.likeCount || 0, dislikeCount: data.dislikeCount || 0 } : null
   });
 
   document.getElementById('editAccessBtn').onclick = () => requestEditAccess(slug);
@@ -1011,6 +1024,18 @@ async function renderPublicEditor(slug, data) {
           <p class="small">După salvare, formularul dispare la scanările viitoare și se va afișa doar versiunea publicată.</p>
           <form id="editorForm">
             ${data.hasContent ? `<div class="small" style="margin-bottom:16px;">Cod validat: <span class="code">${escapeHtml(storedCode)}</span></div>` : ''}
+            <label>Link extern (platformă)<input name="actionLinkUrl" value="${escapeHtml(content.actionLink?.url || '')}" placeholder="https://instagram.com/..." /></label>
+            <label>Text buton link (opțional)<input name="actionLinkLabel" value="${escapeHtml(content.actionLink?.label || '')}" placeholder="Ex: Urmărește-ne pe Instagram" /></label>
+            <div class="grid grid-2">
+              <label>Imagine (upload)<input type="file" name="imageFile" accept="image/png,image/jpeg,image/webp" /></label>
+              <label>Video (upload)<input type="file" name="videoFile" accept="video/mp4,video/webm" /></label>
+              <label>URL imagine alternativ<input name="imageUrl" value="${escapeHtml(content.imageUrl || '')}" placeholder="https://..." /></label>
+              <label>URL video alternativ<input name="videoUrl" value="${escapeHtml(content.videoUrl || '')}" placeholder="https://..." /></label>
+            </div>
+            <label class="inline-toggle voting-eligible-toggle">
+              <input type="checkbox" name="votingEligible" ${content.votingEligible ? 'checked' : ''} />
+              <span>Eligibil pentru Top Votting (doar conținut fără link extern)</span>
+            </label>
             <div class="text-editor-row">
               <label>Text conținut<textarea name="body" placeholder="Scrie textul care apare pe pagina QR">${escapeHtml(content.body || '')}</textarea></label>
               <button type="button" class="secondary style-config-btn" id="openStyleConfig">Stil text</button>
@@ -1028,14 +1053,6 @@ async function renderPublicEditor(slug, data) {
               <label>Aliniere<select name="textAlign">
                 ${['left', 'center', 'right'].map(opt => `<option value="${opt}" ${textStyle.textAlign === opt ? 'selected' : ''}>${opt}</option>`).join('')}
               </select></label>
-            </div>
-            <label>Link extern (platformă)<input name="actionLinkUrl" value="${escapeHtml(content.actionLink?.url || '')}" placeholder="https://instagram.com/..." /></label>
-            <label>Text buton link (opțional)<input name="actionLinkLabel" value="${escapeHtml(content.actionLink?.label || '')}" placeholder="Ex: Urmărește-ne pe Instagram" /></label>
-            <div class="grid grid-2">
-              <label>Imagine (upload)<input type="file" name="imageFile" accept="image/png,image/jpeg,image/webp" /></label>
-              <label>Video (upload)<input type="file" name="videoFile" accept="video/mp4,video/webm" /></label>
-              <label>URL imagine alternativ<input name="imageUrl" value="${escapeHtml(content.imageUrl || '')}" placeholder="https://..." /></label>
-              <label>URL video alternativ<input name="videoUrl" value="${escapeHtml(content.videoUrl || '')}" placeholder="https://..." /></label>
             </div>
             <div class="actions">
               <button type="submit">Salvează experiența</button>
@@ -1061,6 +1078,7 @@ async function renderPublicEditor(slug, data) {
       imageUrl: formData.get('imageUrl') || content.imageUrl,
       videoUrl: formData.get('videoUrl') || content.videoUrl,
       actionLink: normalizeActionLink(formData.get('actionLinkUrl'), formData.get('actionLinkLabel')),
+      votingEligible: formData.get('votingEligible') === 'on',
       theme: content.theme,
       textStyle: {
         color: formData.get('textColor'),
@@ -1092,6 +1110,7 @@ async function renderPublicEditor(slug, data) {
       imageUrl: formData.get('imageUrl'),
       videoUrl: formData.get('videoUrl'),
       actionLink: normalizeActionLink(formData.get('actionLinkUrl'), formData.get('actionLinkLabel')),
+      votingEligible: formData.get('votingEligible') === 'on',
       imageDataUrl: await getDataUrl(state.selectedFileImage),
       videoDataUrl: await getDataUrl(state.selectedFileVideo),
       theme: content.theme,

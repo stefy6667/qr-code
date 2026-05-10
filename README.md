@@ -24,6 +24,13 @@ python3 server.py
 - `UPLOAD_DIR` - opțional, cale explicită pentru fișierele media
 - `PYTHON_VERSION` - recomandat pe Render: `3.11.9` (evită incompatibilități de runtime)
 
+
+## Rute importante
+
+- `/` și `/edit` deschid pagina clientului pentru introducerea codului de editare.
+- `/private-admin` deschide dashboard-ul privat de admin (autentificarea rămâne obligatorie).
+- `/admin` nu mai afișează dashboard-ul și redirecționează către `/edit`, ca pagina principală să nu expună zona de administrare.
+
 ## Deploy pe Render
 
 1. Creează un nou **Web Service** din acest repo.

@@ -25,6 +25,7 @@ PUBLIC_DIR.mkdir(exist_ok=True)
 
 ADMIN_USER = os.environ.get('ADMIN_USERNAME', 'admin')
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'change-me-now')
+ADMIN_PATH = '/private-admin'
 SESSION_SECRET = os.environ.get('SESSION_SECRET', 'dev-secret-change-me')
 PORT = int(os.environ.get('PORT', '3000'))
 BASE_URL = os.environ.get('BASE_URL', f'http://localhost:{PORT}')
@@ -136,6 +137,31 @@ def parse_body(handler):
         return {}
 
 
+
+def content_action_url(content):
+    if not isinstance(content, dict):
+        return ''
+    action_link = content.get('actionLink')
+    action_url = action_link.get('url') if isinstance(action_link, dict) else ''
+    return action_url.strip() if isinstance(action_url, str) else ''
+
+
+def content_has_external_link(content):
+    action_url = content_action_url(content)
+    return action_url.startswith('http://') or action_url.startswith('https://')
+
+
+def content_has_votable_material(content):
+    if not isinstance(content, dict):
+        return False
+    return any(str(content.get(key) or '').strip() for key in ('body', 'headline', 'imageUrl', 'videoUrl'))
+
+
+def content_is_voting_eligible(content):
+    if not isinstance(content, dict):
+        return False
+    return bool(content.get('votingEligible')) and content_has_votable_material(content) and not content_has_external_link(content)
+
 def increment_scan_count(slug):
     conn = db()
     conn.execute('UPDATE qr_codes SET scan_count = scan_count + 1 WHERE slug = ?', (slug,))
@@ -180,7 +206,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.handle_public_qr(slug)
         if path == '/':
             return self.serve_file(PUBLIC_DIR / 'index.html', content_type='text/html; charset=utf-8')
-        if path.startswith('/admin'):
+        if path == '/admin' or path.startswith('/admin/'):
+            self.send_response(302)
+            self.send_header('Location', '/edit')
+            self.end_headers()
+            return
+        if path == ADMIN_PATH or path.startswith(f'{ADMIN_PATH}/'):
             return self.serve_file(PUBLIC_DIR / 'index.html', content_type='text/html; charset=utf-8')
         if path == '/edit' or path.startswith('/edit/'):
             return self.serve_file(PUBLIC_DIR / 'index.html', content_type='text/html; charset=utf-8')
@@ -193,6 +224,20 @@ class Handler(BaseHTTPRequestHandler):
                 if params.get('edit') == ['1']:
                     return self.serve_file(PUBLIC_DIR / 'index.html', content_type='text/html; charset=utf-8')
             increment_scan_count(slug)
+            conn = db()
+            row = conn.execute('SELECT content_json FROM qr_codes WHERE slug = ?', (slug,)).fetchone()
+            conn.close()
+            if row and row['content_json']:
+                try:
+                    content = json.loads(row['content_json'])
+                except json.JSONDecodeError:
+                    content = {}
+                action_url = content_action_url(content)
+                if action_url.startswith('http://') or action_url.startswith('https://'):
+                    self.send_response(302)
+                    self.send_header('Location', action_url)
+                    self.end_headers()
+                    return
             return self.serve_file(PUBLIC_DIR / 'index.html', content_type='text/html; charset=utf-8')
         if path.startswith('/assets/'):
             return self.serve_file(PUBLIC_DIR / path.replace('/assets/', '', 1))
@@ -396,6 +441,7 @@ class Handler(BaseHTTPRequestHandler):
             'scanCount': row['scan_count'] or 0,
             'likeCount': row['like_count'] or 0,
             'dislikeCount': row['dislike_count'] or 0,
+            'votingEligible': content_is_voting_eligible(content),
             'hasContent': bool(content),
             'content': content,
             'googleReviews': {
@@ -408,27 +454,28 @@ class Handler(BaseHTTPRequestHandler):
     def handle_top_voting(self):
         conn = db()
         rows = conn.execute('''
-            SELECT slug, title, scan_count, like_count, dislike_count, content_json
+            SELECT slug, scan_count, like_count, dislike_count, content_json
             FROM qr_codes
             WHERE content_json IS NOT NULL
-            ORDER BY like_count DESC, scan_count DESC, updated_at DESC
-            LIMIT 50
         ''').fetchall()
         conn.close()
         items = []
         for row in rows:
             content = json.loads(row['content_json']) if row['content_json'] else {}
+            if not content_is_voting_eligible(content):
+                continue
             items.append({
                 'slug': row['slug'],
-                'title': row['title'],
                 'scanCount': row['scan_count'] or 0,
                 'likeCount': row['like_count'] or 0,
                 'dislikeCount': row['dislike_count'] or 0,
                 'text': (content.get('body') or content.get('headline') or '') if isinstance(content, dict) else '',
                 'imageUrl': content.get('imageUrl') if isinstance(content, dict) else '',
+                'videoUrl': content.get('videoUrl') if isinstance(content, dict) else '',
                 'url': f'{BASE_URL}/c/{row["slug"]}',
             })
-        return json_response(self, {'items': items})
+        items.sort(key=lambda item: (item['likeCount'], item['scanCount']), reverse=True)
+        return json_response(self, {'items': items[:50]})
 
     def handle_resolve_edit_code(self):
         body = parse_body(self)
@@ -461,10 +508,14 @@ class Handler(BaseHTTPRequestHandler):
             return json_response(self, {'error': 'Vot invalid.'}, 400)
         column = 'like_count' if vote == 'like' else 'dislike_count'
         conn = db()
-        row = conn.execute('SELECT slug FROM qr_codes WHERE slug = ?', (slug,)).fetchone()
+        row = conn.execute('SELECT content_json FROM qr_codes WHERE slug = ?', (slug,)).fetchone()
         if not row:
             conn.close()
             return json_response(self, {'error': 'Codul QR nu există.'}, 404)
+        content = json.loads(row['content_json']) if row['content_json'] else None
+        if not content_is_voting_eligible(content):
+            conn.close()
+            return json_response(self, {'error': 'Acest conținut nu este eligibil pentru voting.'}, 403)
         conn.execute(f'UPDATE qr_codes SET {column} = {column} + 1 WHERE slug = ?', (slug,))
         updated = conn.execute('SELECT like_count, dislike_count FROM qr_codes WHERE slug = ?', (slug,)).fetchone()
         conn.commit()
@@ -506,6 +557,7 @@ class Handler(BaseHTTPRequestHandler):
                 'textAlign': body.get('theme', {}).get('textAlign', 'left'),
             },
             'textStyle': body.get('textStyle') if isinstance(body.get('textStyle'), dict) else {},
+            'votingEligible': bool(body.get('votingEligible')),
             'imageUrl': image_url,
             'videoUrl': video_url,
             'actionLink': body.get('actionLink') if isinstance(body.get('actionLink'), dict) else None,

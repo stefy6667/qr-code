@@ -282,6 +282,11 @@ button.danger { background: linear-gradient(135deg, var(--danger), #be123c); }
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+  width: min(100%, 420px);
+}
+.vote-actions .vote-btn {
+  flex: 1 1 180px;
+  min-height: 48px;
 }
 .vote-btn:disabled {
   opacity: 0.55;
@@ -306,4 +311,38 @@ button.danger { background: linear-gradient(135deg, var(--danger), #be123c); }
 @media (max-width: 760px) {
   .text-editor-row { grid-template-columns: 1fr; }
   .style-config-btn { width: max-content; }
+}
+.voting-eligible-toggle {
+  margin: 14px 0 18px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.05);
+}
+.voting-eligible-toggle span { color: var(--muted); }
+.top-voting-rank {
+  font-weight: 900;
+  color: var(--text);
+}
+.top-voting-preview {
+  display: grid;
+  gap: 10px;
+}
+.top-voting-preview img,
+.top-voting-preview video {
+  width: min(100%, 180px);
+  max-height: 140px;
+  object-fit: cover;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+}
+.top-voting-preview p {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.95rem;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
