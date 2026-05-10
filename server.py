@@ -55,7 +55,9 @@ def init_db():
             review_button_label TEXT,
             qr_style_preset TEXT NOT NULL DEFAULT 'aurora',
             product_templates_json TEXT,
-            scan_count INTEGER NOT NULL DEFAULT 0
+            scan_count INTEGER NOT NULL DEFAULT 0,
+            like_count INTEGER NOT NULL DEFAULT 0,
+            dislike_count INTEGER NOT NULL DEFAULT 0
         );
         '''
     )
@@ -72,6 +74,10 @@ def init_db():
         conn.execute("ALTER TABLE qr_codes ADD COLUMN product_templates_json TEXT")
     if 'scan_count' not in columns:
         conn.execute("ALTER TABLE qr_codes ADD COLUMN scan_count INTEGER NOT NULL DEFAULT 0")
+    if 'like_count' not in columns:
+        conn.execute("ALTER TABLE qr_codes ADD COLUMN like_count INTEGER NOT NULL DEFAULT 0")
+    if 'dislike_count' not in columns:
+        conn.execute("ALTER TABLE qr_codes ADD COLUMN dislike_count INTEGER NOT NULL DEFAULT 0")
     conn.commit()
     conn.close()
 
@@ -167,6 +173,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.handle_session()
         if path == '/api/admin/qr-codes':
             return self.handle_admin_list()
+        if path == '/api/public/top-voting':
+            return self.handle_top_voting()
         if path.startswith('/api/public/qr/'):
             slug = path.split('/')[-1]
             return self.handle_public_qr(slug)
@@ -176,6 +184,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.serve_file(PUBLIC_DIR / 'index.html', content_type='text/html; charset=utf-8')
         if path == '/edit' or path.startswith('/edit/'):
             return self.serve_file(PUBLIC_DIR / 'index.html', content_type='text/html; charset=utf-8')
+        if path == '/top-voting' or path.startswith('/top-voting/'):
+            return self.serve_file(PUBLIC_DIR / 'index.html', content_type='text/html; charset=utf-8')
         if path.startswith('/c/'):
             slug = path.split('/')[-1]
             if parsed.query:
@@ -183,23 +193,6 @@ class Handler(BaseHTTPRequestHandler):
                 if params.get('edit') == ['1']:
                     return self.serve_file(PUBLIC_DIR / 'index.html', content_type='text/html; charset=utf-8')
             increment_scan_count(slug)
-            conn = db()
-            row = conn.execute('SELECT content_json FROM qr_codes WHERE slug = ?', (slug,)).fetchone()
-            conn.close()
-            if row and row['content_json']:
-                try:
-                    content = json.loads(row['content_json'])
-                except json.JSONDecodeError:
-                    content = {}
-                action_link = content.get('actionLink') if isinstance(content, dict) else None
-                action_url = action_link.get('url') if isinstance(action_link, dict) else None
-                if isinstance(action_url, str):
-                    action_url = action_url.strip()
-                    if action_url.startswith('http://') or action_url.startswith('https://'):
-                        self.send_response(302)
-                        self.send_header('Location', action_url)
-                        self.end_headers()
-                        return
             return self.serve_file(PUBLIC_DIR / 'index.html', content_type='text/html; charset=utf-8')
         if path.startswith('/assets/'):
             return self.serve_file(PUBLIC_DIR / path.replace('/assets/', '', 1))
@@ -227,6 +220,9 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith('/api/public/qr/') and path.endswith('/save'):
             slug = path.split('/')[-2]
             return self.handle_public_save(slug)
+        if path.startswith('/api/public/qr/') and path.endswith('/vote'):
+            slug = path.split('/')[-2]
+            return self.handle_public_vote(slug)
         self.send_error(404)
 
     def serve_file(self, filepath: Path, content_type=None):
@@ -323,6 +319,8 @@ class Handler(BaseHTTPRequestHandler):
                 'qrStylePreset': row['qr_style_preset'] or 'aurora',
                 'productTemplates': product_templates,
                 'scanCount': row['scan_count'] or 0,
+                'likeCount': row['like_count'] or 0,
+                'dislikeCount': row['dislike_count'] or 0,
                 'scanUrl': f'{BASE_URL}/c/{row["slug"]}',
                 'qrImageUrl': f'https://api.qrserver.com/v1/create-qr-code/?size=1200x1200&data={quote(f"{BASE_URL}/c/{row["slug"]}", safe="")}',
             })
@@ -396,6 +394,8 @@ class Handler(BaseHTTPRequestHandler):
             'title': row['title'],
             'editCodeHint': row['edit_code'][-3:],
             'scanCount': row['scan_count'] or 0,
+            'likeCount': row['like_count'] or 0,
+            'dislikeCount': row['dislike_count'] or 0,
             'hasContent': bool(content),
             'content': content,
             'googleReviews': {
@@ -404,6 +404,31 @@ class Handler(BaseHTTPRequestHandler):
                 'buttonLabel': row['review_button_label'] or 'Recenzii Google',
             },
         })
+
+    def handle_top_voting(self):
+        conn = db()
+        rows = conn.execute('''
+            SELECT slug, title, scan_count, like_count, dislike_count, content_json
+            FROM qr_codes
+            WHERE content_json IS NOT NULL
+            ORDER BY like_count DESC, scan_count DESC, updated_at DESC
+            LIMIT 50
+        ''').fetchall()
+        conn.close()
+        items = []
+        for row in rows:
+            content = json.loads(row['content_json']) if row['content_json'] else {}
+            items.append({
+                'slug': row['slug'],
+                'title': row['title'],
+                'scanCount': row['scan_count'] or 0,
+                'likeCount': row['like_count'] or 0,
+                'dislikeCount': row['dislike_count'] or 0,
+                'text': (content.get('body') or content.get('headline') or '') if isinstance(content, dict) else '',
+                'imageUrl': content.get('imageUrl') if isinstance(content, dict) else '',
+                'url': f'{BASE_URL}/c/{row["slug"]}',
+            })
+        return json_response(self, {'items': items})
 
     def handle_resolve_edit_code(self):
         body = parse_body(self)
@@ -429,6 +454,27 @@ class Handler(BaseHTTPRequestHandler):
             return json_response(self, {'error': 'Codul de editare este invalid.'}, 403)
         return json_response(self, {'ok': True})
 
+    def handle_public_vote(self, slug):
+        body = parse_body(self)
+        vote = (body.get('vote') or '').strip().lower()
+        if vote not in {'like', 'dislike'}:
+            return json_response(self, {'error': 'Vot invalid.'}, 400)
+        column = 'like_count' if vote == 'like' else 'dislike_count'
+        conn = db()
+        row = conn.execute('SELECT slug FROM qr_codes WHERE slug = ?', (slug,)).fetchone()
+        if not row:
+            conn.close()
+            return json_response(self, {'error': 'Codul QR nu există.'}, 404)
+        conn.execute(f'UPDATE qr_codes SET {column} = {column} + 1 WHERE slug = ?', (slug,))
+        updated = conn.execute('SELECT like_count, dislike_count FROM qr_codes WHERE slug = ?', (slug,)).fetchone()
+        conn.commit()
+        conn.close()
+        return json_response(self, {
+            'ok': True,
+            'likeCount': updated['like_count'] or 0,
+            'dislikeCount': updated['dislike_count'] or 0,
+        })
+
     def handle_public_save(self, slug):
         body = parse_body(self)
         conn = db()
@@ -453,12 +499,13 @@ class Handler(BaseHTTPRequestHandler):
             'body': (body.get('body') or '').strip(),
             'buttonLabel': (body.get('buttonLabel') or 'Editează cu codul unic').strip(),
             'theme': {
-                'background': body.get('theme', {}).get('background', '#0f172a'),
+                'background': body.get('theme', {}).get('background', '#171717'),
                 'foreground': body.get('theme', {}).get('foreground', '#f8fafc'),
-                'accent': body.get('theme', {}).get('accent', '#38bdf8'),
+                'accent': body.get('theme', {}).get('accent', '#9ca3af'),
                 'fontFamily': body.get('theme', {}).get('fontFamily', 'Inter, sans-serif'),
                 'textAlign': body.get('theme', {}).get('textAlign', 'left'),
             },
+            'textStyle': body.get('textStyle') if isinstance(body.get('textStyle'), dict) else {},
             'imageUrl': image_url,
             'videoUrl': video_url,
             'actionLink': body.get('actionLink') if isinstance(body.get('actionLink'), dict) else None,

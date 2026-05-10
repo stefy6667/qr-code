@@ -102,6 +102,7 @@ async function getDataUrl(file) {
 function route() {
   const path = location.pathname;
   if (path.startsWith('/c/')) return renderPublic(path.split('/').pop());
+  if (path === '/top-voting' || path.startsWith('/top-voting/')) return renderTopVoting();
   if (path === '/edit' || path.startsWith('/edit/')) return renderEditAccess();
   if (path.startsWith('/admin')) return renderAdmin();
   return renderLanding();
@@ -381,7 +382,13 @@ function getDefaultContent(data) {
     },
     imageUrl: '',
     videoUrl: '',
-    actionLink: null
+    actionLink: null,
+    textStyle: {
+      color: '#f8fafc',
+      fontSize: '20',
+      fontFamily: fonts[0],
+      textAlign: 'left'
+    }
   };
 }
 
@@ -845,8 +852,73 @@ function normalizeActionLink(rawUrl, customLabel = '') {
   };
 }
 
+function getTextStyle(content) {
+  return {
+    color: content.textStyle?.color || content.theme?.foreground || '#f8fafc',
+    fontSize: content.textStyle?.fontSize || '20',
+    fontFamily: content.textStyle?.fontFamily || content.theme?.fontFamily || fonts[0],
+    textAlign: content.textStyle?.textAlign || content.theme?.textAlign || 'left'
+  };
+}
+
+function textStyleAttribute(content) {
+  const style = getTextStyle(content);
+  const size = Math.min(72, Math.max(12, Number(style.fontSize) || 20));
+  const align = ['left', 'center', 'right'].includes(style.textAlign) ? style.textAlign : 'left';
+  return `color:${escapeAttribute(style.color)};font-size:${size}px;font-family:${escapeAttribute(style.fontFamily)};text-align:${align};`;
+}
+
+function voteStorageKey(slug) {
+  return `qr_vote_${slug}`;
+}
+
+async function submitVote(slug, vote) {
+  if (localStorage.getItem(voteStorageKey(slug))) {
+    alert('Ai votat deja acest conținut de pe acest dispozitiv.');
+    return;
+  }
+  const result = await api(`/api/public/qr/${slug}/vote`, {
+    method: 'POST',
+    body: JSON.stringify({ vote })
+  });
+  localStorage.setItem(voteStorageKey(slug), vote);
+  const likeNode = document.getElementById('likeCount');
+  const dislikeNode = document.getElementById('dislikeCount');
+  if (likeNode) likeNode.textContent = result.likeCount;
+  if (dislikeNode) dislikeNode.textContent = result.dislikeCount;
+  document.querySelectorAll('.vote-btn').forEach((button) => button.disabled = true);
+}
+
+async function renderTopVoting() {
+  const data = await api('/api/public/top-voting');
+  app.innerHTML = html`
+    <section class="hero container">
+      <div class="public-topbar" style="margin-bottom:16px;">
+        <div class="public-nav-buttons">
+          <a class="top-link-btn" href="https://silentsignals.ro" target="_blank" rel="noopener noreferrer">Shop</a>
+          <a class="top-link-btn" href="/top-voting">Top Votting</a>
+        </div>
+        <a class="secondary top-link-btn" href="/">Acasă</a>
+      </div>
+      <div class="card">
+        <span class="badge">Top Votting</span>
+        <h2>Top Votting coduri QR</h2>
+        <div class="top-voting-list">
+          ${(data.items || []).map((item, index) => html`
+            <a class="top-voting-item" href="/c/${escapeAttribute(item.slug)}">
+              <strong>#${index + 1} ${escapeHtml(item.title || item.slug)}</strong>
+              <span>${escapeHtml(item.text || 'Conținut QR')}</span>
+              <small>👍 ${item.likeCount || 0} · 👎 ${item.dislikeCount || 0} · Scanări ${item.scanCount || 0}</small>
+            </a>
+          `).join('') || '<p class="small">Nu există încă voturi.</p>'}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
 function previewMarkup(content, label = 'Previzualizare live', options = {}) {
-  const { showButton = true, usePlaceholders = true, showLabel = true, googleReviews = null, linkOverride = null } = options;
+  const { showButton = true, usePlaceholders = true, showLabel = true, googleReviews = null, linkOverride = null, voting = null } = options;
   const headline = String(content.headline || '').trim();
   const body = String(content.body || '').trim();
   const buttonLabel = String(content.buttonLabel || '').trim();
@@ -859,7 +931,7 @@ function previewMarkup(content, label = 'Previzualizare live', options = {}) {
   return html`
     ${showLabel ? `<span class="badge" style="background:${content.theme.accent}22;color:${content.theme.accent};border-color:${content.theme.accent}66">${label}</span>` : ''}
     ${headline ? `<h2>${escapeHtml(headline)}</h2>` : (usePlaceholders ? '<h2>Titlul tău apare aici</h2>' : '')}
-    ${body ? `<p>${escapeHtml(body)}</p>` : (usePlaceholders ? '<p>Aici va apărea descrierea, oferta sau mesajul personalizat.</p>' : '')}
+    ${body ? `<p class="content-text" style="${textStyleAttribute(content)}">${escapeHtml(body)}</p>` : (usePlaceholders ? '<p>Aici va apărea descrierea, oferta sau mesajul personalizat.</p>' : '')}
     ${hasImage ? `<img src="${escapeAttribute(content.imageUrl)}" alt="vizual" style="${mediaStyle}" />` : ''}
     ${hasVideo ? `<video src="${escapeAttribute(content.videoUrl)}" controls style="${mediaStyle}"></video>` : ''}
     ${showButton && buttonLabel ? `<button type="button" style="width:max-content;background:linear-gradient(135deg, ${content.theme.accent}, #6b7280)">${escapeHtml(buttonLabel)}</button>` : ''}
@@ -870,6 +942,15 @@ function previewMarkup(content, label = 'Previzualizare live', options = {}) {
         <iframe src="${escapeAttribute(googleReviews.embedUrl)}" loading="lazy" referrerpolicy="no-referrer-when-downgrade" allowfullscreen></iframe>
       </div>
     ` : ''}
+    ${voting ? html`
+      <div class="vote-box">
+        <p class="small">Votează acest conținut</p>
+        <div class="vote-actions">
+          <button type="button" class="vote-btn" data-vote="like">👍 Like <span id="likeCount">${voting.likeCount || 0}</span></button>
+          <button type="button" class="vote-btn secondary" data-vote="dislike">👎 Dislike <span id="dislikeCount">${voting.dislikeCount || 0}</span></button>
+        </div>
+      </div>
+    ` : ''}
   `;
 }
 
@@ -877,7 +958,11 @@ function renderPublicView(slug, data) {
   const saved = getDefaultContent(data);
   app.innerHTML = html`
     <section class="hero container public-shell">
-      <div class="public-topbar public-topbar-end">
+      <div class="public-topbar">
+        <div class="public-nav-buttons">
+          <a class="top-link-btn" href="https://silentsignals.ro" target="_blank" rel="noopener noreferrer">Shop</a>
+          <a class="top-link-btn" href="/top-voting">Top Votting</a>
+        </div>
         <button id="editAccessBtn" class="secondary top-edit-btn">Editează</button>
       </div>
       <div class="preview public-preview">
@@ -891,13 +976,24 @@ function renderPublicView(slug, data) {
   preview.style.color = saved.theme.foreground;
   preview.style.fontFamily = saved.theme.fontFamily;
   preview.style.textAlign = saved.theme.textAlign;
-  preview.innerHTML = previewMarkup(saved, '', { showButton: false, usePlaceholders: false, showLabel: false, googleReviews: data.googleReviews });
+  preview.innerHTML = previewMarkup(saved, '', {
+    showButton: false,
+    usePlaceholders: false,
+    showLabel: false,
+    googleReviews: data.googleReviews,
+    voting: { likeCount: data.likeCount || 0, dislikeCount: data.dislikeCount || 0 }
+  });
 
   document.getElementById('editAccessBtn').onclick = () => requestEditAccess(slug);
+  document.querySelectorAll('.vote-btn').forEach((button) => {
+    if (localStorage.getItem(voteStorageKey(slug))) button.disabled = true;
+    button.onclick = () => submitVote(slug, button.dataset.vote);
+  });
 }
 
 async function renderPublicEditor(slug, data) {
   const content = getDefaultContent(data);
+  const textStyle = getTextStyle(content);
   const storedCode = getStoredEditCode(slug);
   app.innerHTML = html`
     <section class="hero container">
@@ -915,6 +1011,24 @@ async function renderPublicEditor(slug, data) {
           <p class="small">După salvare, formularul dispare la scanările viitoare și se va afișa doar versiunea publicată.</p>
           <form id="editorForm">
             ${data.hasContent ? `<div class="small" style="margin-bottom:16px;">Cod validat: <span class="code">${escapeHtml(storedCode)}</span></div>` : ''}
+            <div class="text-editor-row">
+              <label>Text conținut<textarea name="body" placeholder="Scrie textul care apare pe pagina QR">${escapeHtml(content.body || '')}</textarea></label>
+              <button type="button" class="secondary style-config-btn" id="openStyleConfig">Stil text</button>
+            </div>
+            <div class="style-popover hidden" id="stylePopover">
+              <div class="style-popover-header">
+                <strong>Configurare text</strong>
+                <button type="button" class="secondary" id="closeStyleConfig">Închide</button>
+              </div>
+              <label>Culoare text<input type="color" name="textColor" value="${escapeHtml(textStyle.color)}" /></label>
+              <label>Dimensiune text<input type="range" name="fontSize" min="12" max="72" value="${escapeHtml(textStyle.fontSize)}" /></label>
+              <label>Font<select name="fontFamily">
+                ${fonts.map(font => `<option value="${font}" ${textStyle.fontFamily === font ? 'selected' : ''}>${font}</option>`).join('')}
+              </select></label>
+              <label>Aliniere<select name="textAlign">
+                ${['left', 'center', 'right'].map(opt => `<option value="${opt}" ${textStyle.textAlign === opt ? 'selected' : ''}>${opt}</option>`).join('')}
+              </select></label>
+            </div>
             <label>Link extern (platformă)<input name="actionLinkUrl" value="${escapeHtml(content.actionLink?.url || '')}" placeholder="https://instagram.com/..." /></label>
             <label>Text buton link (opțional)<input name="actionLinkLabel" value="${escapeHtml(content.actionLink?.label || '')}" placeholder="Ex: Urmărește-ne pe Instagram" /></label>
             <div class="grid grid-2">
@@ -942,12 +1056,18 @@ async function renderPublicEditor(slug, data) {
     const formData = new FormData(form);
     const previewContent = {
       headline: '',
-      body: '',
+      body: formData.get('body'),
       buttonLabel: '',
       imageUrl: formData.get('imageUrl') || content.imageUrl,
       videoUrl: formData.get('videoUrl') || content.videoUrl,
       actionLink: normalizeActionLink(formData.get('actionLinkUrl'), formData.get('actionLinkLabel')),
-      theme: content.theme
+      theme: content.theme,
+      textStyle: {
+        color: formData.get('textColor'),
+        fontSize: formData.get('fontSize'),
+        fontFamily: formData.get('fontFamily'),
+        textAlign: formData.get('textAlign')
+      }
     };
     preview.style.background = previewContent.theme.background;
     preview.style.color = previewContent.theme.foreground;
@@ -956,6 +1076,8 @@ async function renderPublicEditor(slug, data) {
     preview.innerHTML = previewMarkup(previewContent, 'Previzualizare live', { showButton: false, usePlaceholders: false });
   };
 
+  document.getElementById('openStyleConfig').onclick = () => document.getElementById('stylePopover').classList.remove('hidden');
+  document.getElementById('closeStyleConfig').onclick = () => document.getElementById('stylePopover').classList.add('hidden');
   form.oninput = updatePreview;
   form.imageFile.onchange = (e) => { state.selectedFileImage = e.target.files[0] || null; };
   form.videoFile.onchange = (e) => { state.selectedFileVideo = e.target.files[0] || null; };
@@ -965,14 +1087,20 @@ async function renderPublicEditor(slug, data) {
     const payload = {
       editCode: storedCode,
       headline: '',
-      body: '',
+      body: formData.get('body'),
       buttonLabel: '',
       imageUrl: formData.get('imageUrl'),
       videoUrl: formData.get('videoUrl'),
       actionLink: normalizeActionLink(formData.get('actionLinkUrl'), formData.get('actionLinkLabel')),
       imageDataUrl: await getDataUrl(state.selectedFileImage),
       videoDataUrl: await getDataUrl(state.selectedFileVideo),
-      theme: content.theme
+      theme: content.theme,
+      textStyle: {
+        color: formData.get('textColor'),
+        fontSize: formData.get('fontSize'),
+        fontFamily: formData.get('fontFamily'),
+        textAlign: formData.get('textAlign')
+      }
     };
     try {
       await api(`/api/public/qr/${slug}/save`, { method: 'POST', body: JSON.stringify(payload) });
