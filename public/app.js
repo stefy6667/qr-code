@@ -947,7 +947,7 @@ function previewMarkup(content, label = 'Previzualizare live', options = {}) {
     ${headline ? `<h2>${escapeHtml(headline)}</h2>` : (usePlaceholders ? '<h2>Titlul tău apare aici</h2>' : '')}
     ${body ? `<p class="content-text" style="${textStyleAttribute(content)}">${escapeHtml(body)}</p>` : (usePlaceholders ? '<p>Aici va apărea descrierea, oferta sau mesajul personalizat.</p>' : '')}
     ${hasImage ? `<img src="${escapeAttribute(content.imageUrl)}" alt="vizual" style="${mediaStyle}" />` : ''}
-    ${hasVideo ? `<video src="${escapeAttribute(content.videoUrl)}" controls style="${mediaStyle}"></video>` : ''}
+    ${hasVideo ? `<video src="${escapeAttribute(content.videoUrl)}" controls autoplay muted playsinline loop preload="auto" style="${mediaStyle}"></video>` : ''}
     ${showButton && buttonLabel ? `<button type="button" style="width:max-content;background:linear-gradient(135deg, ${content.theme.accent}, #6b7280)">${escapeHtml(buttonLabel)}</button>` : ''}
     ${actionLink ? `<a href="${escapeAttribute(actionLink.url)}" target="_blank" rel="noopener noreferrer" class="platform-link-btn platform-${escapeAttribute(actionLink.platform)}" style="--accent:${content.theme.accent};">${escapeHtml(actionLink.label)}</a>` : ''}
     ${reviewsEnabled ? html`
