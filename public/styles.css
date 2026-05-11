@@ -346,3 +346,10 @@ button.danger { background: linear-gradient(135deg, var(--danger), #be123c); }
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+.sound-unlock-btn {
+  width: max-content;
+  margin-top: -6px;
+  justify-self: start;
+  background: linear-gradient(180deg, #f4f4f4, #d8d8d8);
+  color: #0a0a0a;
+}
