@@ -1000,10 +1000,20 @@ function showSoundUnlock(video) {
   button.onclick = () => {
     video.muted = false;
     video.volume = 1;
-    video.play().catch(() => {});
-    button.remove();
+    const playPromise = video.play();
+    if (playPromise && typeof playPromise.then === 'function') {
+      playPromise.then(() => button.remove()).catch(() => {
+        video.muted = true;
+        video.play().catch(() => {});
+      });
+    } else {
+      button.remove();
+    }
   };
   video.insertAdjacentElement('afterend', button);
+  window.setTimeout(() => {
+    if (button.isConnected) button.click();
+  }, 3000);
 }
 
 function renderPublicView(slug, data) {
