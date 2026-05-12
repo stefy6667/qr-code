@@ -996,6 +996,8 @@ function showSoundUnlock(video) {
   const button = document.createElement('button');
   button.type = 'button';
   button.className = 'sound-unlock-btn';
+  button.dataset.autoClickableSound = 'true';
+  button.setAttribute('aria-label', 'Pornește sunetul');
   button.textContent = 'Pornește sunetul';
   button.onclick = () => {
     video.muted = false;
@@ -1011,9 +1013,15 @@ function showSoundUnlock(video) {
     }
   };
   video.insertAdjacentElement('afterend', button);
-  window.setTimeout(() => {
-    if (button.isConnected) button.click();
-  }, 3000);
+  window.setTimeout(() => autoClickSoundButton(button), 3000);
+}
+
+function autoClickSoundButton(button) {
+  if (!button.isConnected) return;
+  ['pointerdown', 'mousedown', 'mouseup', 'click'].forEach((eventName) => {
+    button.dispatchEvent(new MouseEvent(eventName, { bubbles: true, cancelable: true, view: window }));
+  });
+  if (button.isConnected) button.click();
 }
 
 function renderPublicView(slug, data) {
