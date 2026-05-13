@@ -11,7 +11,9 @@ Uses error correction level H (~30%) so the stylization stays well within
 the QR spec's recoverable noise margin, keeping scans reliable across phones.
 """
 
-import segno
+# segno is imported lazily inside build_svg() so the module can be loaded
+# (and the rest of the server can start) even if the dependency isn't yet
+# installed in the runtime environment.
 
 
 # Named presets. Keep the keys in sync with the frontend `qrStylePresets`.
@@ -61,6 +63,14 @@ def build_svg(
     Return an SVG string for the given data, styled per `preset` with
     optional color overrides.
     """
+    try:
+        import segno
+    except ImportError as e:
+        raise RuntimeError(
+            "The 'segno' package is required for styled QR generation. "
+            "Add `pip install -r requirements.txt` to your build command."
+        ) from e
+
     cfg = dict(PRESETS.get(preset) or PRESETS['instagramGlow'])
     if gradient_top:
         cfg['gradient_top'] = gradient_top
