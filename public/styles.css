@@ -365,3 +365,58 @@ button.danger { background: linear-gradient(135deg, var(--danger), #be123c); }
 .sound-unlock-btn:focus-visible {
   opacity: 0.35;
 }
+
+.icon-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 12px;
+}
+.icon-picker-label {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  margin-right: 4px;
+}
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.4);
+  color: #e2e8f0;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.icon-btn:hover {
+  border-color: rgba(148, 163, 184, 0.6);
+  background: rgba(30, 41, 59, 0.5);
+}
+.icon-btn.active {
+  border-color: #f97316;
+  background: rgba(249, 115, 22, 0.15);
+  color: #fff;
+  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.25);
+}
+.icon-swatch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 900;
+  color: #fff;
+  line-height: 1;
+}
+.icon-swatch.icon-fb { background: #1877F2; }
+.icon-swatch.icon-ig {
+  background: linear-gradient(135deg, #FCAF45 0%, #E1306C 50%, #5B51D8 100%);
+  font-size: 12px;
+}
+.icon-swatch.icon-tt { background: #000; }

@@ -219,10 +219,10 @@ async function renderAdmin() {
           <article class="card qr-item">
             <div>
               <div class="qr-preview-card ${item.qrStylePreset || 'aurora'}">
-                <canvas class="qr-canvas" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-size="170"></canvas>
+                <canvas class="qr-canvas" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-icon="${escapeAttribute(item.centerIcon || '')}" data-qr-size="170"></canvas>
               </div>
               <div class="actions" style="margin-top:12px">
-                <button type="button" class="download-qr-btn" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-name="${escapeAttribute(item.slug)}">Download PNG</button>
+                <button type="button" class="download-qr-btn" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-icon="${escapeAttribute(item.centerIcon || '')}" data-qr-name="${escapeAttribute(item.slug)}">Download PNG</button>
                 <button type="button" class="secondary template-print-btn" data-template='${escapeAttribute(JSON.stringify({
                   slug: item.slug,
                   title: item.title,
@@ -230,10 +230,10 @@ async function renderAdmin() {
                   scanUrl: item.scanUrl,
                   qrImageUrl: item.qrImageUrl
                 }))}'>Template print</button>
-                <button type="button" class="secondary garment-mockup-btn" data-garment="tshirt" data-garment-color="white" data-template-image="${escapeAttribute(item.productTemplates?.tshirtWhite || '')}" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-name="${escapeAttribute(item.slug)}">Tricou alb</button>
-                <button type="button" class="secondary garment-mockup-btn" data-garment="tshirt" data-garment-color="black" data-template-image="${escapeAttribute(item.productTemplates?.tshirtBlack || '')}" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-name="${escapeAttribute(item.slug)}">Tricou negru</button>
-                <button type="button" class="secondary garment-mockup-btn" data-garment="hoodie" data-garment-color="white" data-template-image="${escapeAttribute(item.productTemplates?.hoodieWhite || '')}" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-name="${escapeAttribute(item.slug)}">Hanorac alb</button>
-                <button type="button" class="secondary garment-mockup-btn" data-garment="hoodie" data-garment-color="black" data-template-image="${escapeAttribute(item.productTemplates?.hoodieBlack || '')}" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-name="${escapeAttribute(item.slug)}">Hanorac negru</button>
+                <button type="button" class="secondary garment-mockup-btn" data-garment="tshirt" data-garment-color="white" data-template-image="${escapeAttribute(item.productTemplates?.tshirtWhite || '')}" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-icon="${escapeAttribute(item.centerIcon || '')}" data-qr-name="${escapeAttribute(item.slug)}">Tricou alb</button>
+                <button type="button" class="secondary garment-mockup-btn" data-garment="tshirt" data-garment-color="black" data-template-image="${escapeAttribute(item.productTemplates?.tshirtBlack || '')}" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-icon="${escapeAttribute(item.centerIcon || '')}" data-qr-name="${escapeAttribute(item.slug)}">Tricou negru</button>
+                <button type="button" class="secondary garment-mockup-btn" data-garment="hoodie" data-garment-color="white" data-template-image="${escapeAttribute(item.productTemplates?.hoodieWhite || '')}" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-icon="${escapeAttribute(item.centerIcon || '')}" data-qr-name="${escapeAttribute(item.slug)}">Hanorac alb</button>
+                <button type="button" class="secondary garment-mockup-btn" data-garment="hoodie" data-garment-color="black" data-template-image="${escapeAttribute(item.productTemplates?.hoodieBlack || '')}" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-icon="${escapeAttribute(item.centerIcon || '')}" data-qr-name="${escapeAttribute(item.slug)}">Hanorac negru</button>
               </div>
             </div>
             <div>
@@ -249,6 +249,14 @@ async function renderAdmin() {
                 <label>Google Embed URL<input name="reviewEmbedUrl" value="${escapeHtml(item.googleReviews?.embedUrl || '')}" placeholder="https://www.google.com/maps/embed?..." /></label>
                 <label>Text buton recenzii<input name="reviewButtonLabel" value="${escapeHtml(item.googleReviews?.buttonLabel || 'Recenzii Google')}" /></label>
                 <label>Stil QR<select name="qrStylePreset">${Object.entries(qrStylePresets).map(([key, preset]) => `<option value="${key}" ${item.qrStylePreset === key ? 'selected' : ''}>${preset.label}</option>`).join('')}</select></label>
+                <div class="icon-picker">
+                  <span class="icon-picker-label">Icon central:</span>
+                  <input type="hidden" name="centerIcon" value="${escapeAttribute(item.centerIcon || '')}" />
+                  <button type="button" class="icon-btn ${!item.centerIcon ? 'active' : ''}" data-icon-value="">Fără</button>
+                  <button type="button" class="icon-btn ${item.centerIcon === 'facebook' ? 'active' : ''}" data-icon-value="facebook" title="Facebook"><span class="icon-swatch icon-fb">f</span> Facebook</button>
+                  <button type="button" class="icon-btn ${item.centerIcon === 'instagram' ? 'active' : ''}" data-icon-value="instagram" title="Instagram"><span class="icon-swatch icon-ig">◉</span> Instagram</button>
+                  <button type="button" class="icon-btn ${item.centerIcon === 'tiktok' ? 'active' : ''}" data-icon-value="tiktok" title="TikTok"><span class="icon-swatch icon-tt">♪</span> TikTok</button>
+                </div>
                 <label>Template tricou alb (fără cod)<input type="file" name="tplTshirtWhiteFile" accept="image/png,image/jpeg,image/webp" /></label>
                 <label>Template tricou negru (fără cod)<input type="file" name="tplTshirtBlackFile" accept="image/png,image/jpeg,image/webp" /></label>
                 <label>Template hanorac alb (fără cod)<input type="file" name="tplHoodieWhiteFile" accept="image/png,image/jpeg,image/webp" /></label>
@@ -304,6 +312,7 @@ async function renderAdmin() {
               buttonLabel: formData.get('reviewButtonLabel'),
             },
             qrStylePreset: formData.get('qrStylePreset'),
+            centerIcon: formData.get('centerIcon') || '',
             productTemplates
           })
         });
@@ -440,7 +449,7 @@ function buildQrRenderConfig(text, styleKey, size = 240) {
   };
 }
 
-function buildServerSvgUrl(text, styleKey, size) {
+function buildServerSvgUrl(text, styleKey, size, icon) {
   const preset = getQrPreset(styleKey);
   const serverPreset = preset.serverPreset || styleKey;
   const params = new URLSearchParams({
@@ -448,6 +457,9 @@ function buildServerSvgUrl(text, styleKey, size) {
     preset: serverPreset,
     size: String(size)
   });
+  if (icon && ['facebook', 'instagram', 'tiktok'].includes(icon)) {
+    params.set('icon', icon);
+  }
   return `/qr.svg?${params.toString()}`;
 }
 
@@ -460,14 +472,14 @@ function loadImage(src) {
   });
 }
 
-async function renderPrettyQr(canvas, text, styleKey, size = 240) {
+async function renderPrettyQr(canvas, text, styleKey, size = 240, icon = null) {
   if (!canvas) return false;
   const preset = getQrPreset(styleKey);
   canvas.width = size;
   canvas.height = size;
   if (preset.engine === 'server-svg') {
     try {
-      const img = await loadImage(buildServerSvgUrl(text, styleKey, size));
+      const img = await loadImage(buildServerSvgUrl(text, styleKey, size, icon));
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, size, size);
       ctx.drawImage(img, 0, 0, size, size);
@@ -482,13 +494,11 @@ async function renderPrettyQr(canvas, text, styleKey, size = 240) {
   return true;
 }
 
-async function downloadPrettyQr(text, styleKey, filename) {
+async function downloadPrettyQr(text, styleKey, filename, icon = null) {
   const preset = getQrPreset(styleKey);
   const size = 1200;
-  // For both engines we rasterize to a canvas and export PNG — this keeps
-  // downloads consistent regardless of preset engine.
   const canvas = document.createElement('canvas');
-  const ok = await renderPrettyQr(canvas, text, styleKey, size);
+  const ok = await renderPrettyQr(canvas, text, styleKey, size, icon);
   if (!ok && preset.engine !== 'server-svg' && !window.QrCreator) {
     return window.open(text, '_blank');
   }
@@ -499,9 +509,9 @@ async function downloadPrettyQr(text, styleKey, filename) {
 }
 
 
-async function createQrCanvasForMockup(url, styleKey, size = 620) {
+async function createQrCanvasForMockup(url, styleKey, size = 620, icon = null) {
   const qrCanvas = document.createElement('canvas');
-  await renderPrettyQr(qrCanvas, url, styleKey, size);
+  await renderPrettyQr(qrCanvas, url, styleKey, size, icon);
   return qrCanvas;
 }
 
@@ -689,7 +699,7 @@ function loadImage(url) {
   });
 }
 
-async function downloadGarmentMockup(url, styleKey, name, garment, color, templateImage) {
+async function downloadGarmentMockup(url, styleKey, name, garment, color, templateImage, icon = null) {
   const canvas = document.createElement('canvas');
   canvas.width = 1800;
   canvas.height = 2200;
@@ -725,7 +735,7 @@ async function downloadGarmentMockup(url, styleKey, name, garment, color, templa
     }
   }
 
-  const qrCanvas = await createQrCanvasForMockup(url, styleKey, 620);
+  const qrCanvas = await createQrCanvasForMockup(url, styleKey, 620, icon);
   const qrX = 590;
   const qrY = garment === 'hoodie' ? 900 : 950;
   ctx.fillStyle = '#ffffff';
@@ -850,10 +860,20 @@ function openPrintTemplateCard(item) {
 
 function renderAdminQrCodes() {
   document.querySelectorAll('.qr-canvas').forEach((canvas) => {
-    renderPrettyQr(canvas, canvas.dataset.qrUrl, canvas.dataset.qrStyle, Number(canvas.dataset.qrSize || 170));
+    renderPrettyQr(canvas, canvas.dataset.qrUrl, canvas.dataset.qrStyle, Number(canvas.dataset.qrSize || 170), canvas.dataset.qrIcon || null);
   });
   document.querySelectorAll('.download-qr-btn').forEach((button) => {
-    button.onclick = () => downloadPrettyQr(button.dataset.qrUrl, button.dataset.qrStyle, button.dataset.qrName || 'qr-code');
+    button.onclick = () => downloadPrettyQr(button.dataset.qrUrl, button.dataset.qrStyle, button.dataset.qrName || 'qr-code', button.dataset.qrIcon || null);
+  });
+  document.querySelectorAll('.icon-picker').forEach((picker) => {
+    const hidden = picker.querySelector('input[name="centerIcon"]');
+    picker.querySelectorAll('.icon-btn').forEach((btn) => {
+      btn.onclick = () => {
+        hidden.value = btn.dataset.iconValue || '';
+        picker.querySelectorAll('.icon-btn').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+      };
+    });
   });
   document.querySelectorAll('.template-print-btn').forEach((button) => {
     button.onclick = () => {
@@ -872,7 +892,8 @@ function renderAdminQrCodes() {
         button.dataset.qrName || 'qr-code',
         button.dataset.garment || 'tshirt',
         button.dataset.garmentColor || 'white',
-        button.dataset.templateImage || ''
+        button.dataset.templateImage || '',
+        button.dataset.qrIcon || null
       );
     };
   });
