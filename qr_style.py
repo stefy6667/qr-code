@@ -11,9 +11,14 @@ Uses error correction level H (~30%) so the stylization stays well within
 the QR spec's recoverable noise margin, keeping scans reliable across phones.
 """
 
-# segno is imported lazily inside build_svg() so the module can be loaded
-# (and the rest of the server can start) even if the dependency isn't yet
-# installed in the runtime environment.
+import os
+import sys
+
+# Make the vendored copy of segno importable. We prepend `vendor/` only if the
+# package isn't already importable, so pip-installed environments keep working.
+_VENDOR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'vendor')
+if os.path.isdir(os.path.join(_VENDOR, 'segno')) and _VENDOR not in sys.path:
+    sys.path.insert(0, _VENDOR)
 
 
 # Named presets. Keep the keys in sync with the frontend `qrStylePresets`.
