@@ -34,8 +34,8 @@ PRESETS = {
         # 7-module outer ring with ~1.5-module radius reads as the iconic
         # "rounded square O", and the 3-module center with ~0.8-module
         # radius reads as a soft inner pellet.
-        'finder_corner_radius_modules': 1.5,
-        'finder_center_radius_modules': 0.8,
+        'finder_corner_radius_modules': 2.5,
+        'finder_center_radius_modules': 1.2,
         'module_fill_factor': 0.85,    # ~15% gap so each module reads as a discrete pixel
     },
     'instagramGlowLight': {
@@ -43,8 +43,8 @@ PRESETS = {
         'gradient_mid': '#DB2777',
         'gradient_bottom': '#EA580C',
         'background': '#FFFFFF',
-        'finder_corner_radius_modules': 1.5,
-        'finder_center_radius_modules': 0.8,
+        'finder_corner_radius_modules': 2.5,
+        'finder_center_radius_modules': 1.2,
         'module_fill_factor': 0.85,
     },
 }
@@ -273,7 +273,15 @@ def build_svg(
         f'viewBox="0 0 {size} {size}" width="{size}" height="{size}" '
         f'shape-rendering="geometricPrecision">',
         '<defs>',
-        '<linearGradient id="qrGrad" x1="0" y1="0" x2="0" y2="1">',
+        # gradientUnits="userSpaceOnUse" is CRITICAL: without it, each shape
+        # using url(#qrGrad) samples the gradient inside its own bounding
+        # box, so every tiny module ends up as the middle of the gradient
+        # (magenta), losing the purple→orange progression. With user-space
+        # units the gradient spans the whole SVG once, so modules at the
+        # top render purple and modules at the bottom render orange — which
+        # is what the t-shirt reference shows.
+        f'<linearGradient id="qrGrad" gradientUnits="userSpaceOnUse" '
+        f'x1="0" y1="0" x2="0" y2="{size}">',
         f'<stop offset="0%" stop-color="{cfg["gradient_top"]}"/>',
         f'<stop offset="50%" stop-color="{cfg["gradient_mid"]}"/>',
         f'<stop offset="100%" stop-color="{cfg["gradient_bottom"]}"/>',
@@ -283,32 +291,105 @@ def build_svg(
     if cfg.get('background'):
         parts.append(f'<rect width="{size}" height="{size}" fill="{cfg["background"]}"/>')
 
-    # data modules — sharp pixel squares as in the reference t-shirt design.
-    # A tiny gap (`module_fill_factor` < 1) keeps modules visually discrete
-    # so the QR reads as a grid of pixels rather than a continuous blob.
+    # data modules — drawn as continuous LINES (pill / stadium shapes).
+    # We greedily group consecutive dark modules in each row into a single
+    # horizontal run, and any dark module not consumed by a row run gets
+    # grouped vertically. Each run is rendered as one rounded-cap rectangle
+    # spanning its full length, so adjacent modules visually merge into a
+    # single flowing line with only the endpoints rounded — matching the
+    # reference t-shirt design's "lines, not dots" look.
     legacy_dot = cfg.get('dot_radius_factor')  # back-compat for old "dots" presets
-    fill_factor = cfg.get('module_fill_factor', 0.92)
-    mod_size = module_size * fill_factor
-    mod_offset = (module_size - mod_size) / 2
     parts.append('<g fill="url(#qrGrad)">')
-    for r, row in enumerate(matrix):
-        for c, val in enumerate(row):
-            if not val or in_finder(r, c) or in_icon(r, c):
-                continue
-            if legacy_dot is not None:
+
+    if legacy_dot is not None:
+        # Back-compat path: render simple circles for old "dot" presets.
+        for r, row in enumerate(matrix):
+            for c, val in enumerate(row):
+                if not val or in_finder(r, c) or in_icon(r, c):
+                    continue
                 cx_d = (c + quiet + 0.5) * module_size
                 cy_d = (r + quiet + 0.5) * module_size
                 parts.append(
                     f'<circle cx="{cx_d:.2f}" cy="{cy_d:.2f}" '
                     f'r="{module_size * legacy_dot:.2f}"/>'
                 )
-                continue
-            x = (c + quiet) * module_size + mod_offset
-            y = (r + quiet) * module_size + mod_offset
-            parts.append(
-                f'<rect x="{x:.2f}" y="{y:.2f}" '
-                f'width="{mod_size:.2f}" height="{mod_size:.2f}"/>'
+    else:
+        # Track which cells have already been emitted (as part of a run).
+        consumed = [[False] * n for _ in range(n)]
+
+        def is_data(rr: int, cc: int) -> bool:
+            """A dark module that we should render (not finder, not icon)."""
+            return (
+                bool(matrix[rr][cc])
+                and not in_finder(rr, cc)
+                and not in_icon(rr, cc)
             )
+
+        # Pass 1 — horizontal runs of length >= 2
+        for r in range(n):
+            c = 0
+            while c < n:
+                if not is_data(r, c) or consumed[r][c]:
+                    c += 1
+                    continue
+                # find run length to the right
+                start = c
+                while c < n and is_data(r, c) and not consumed[r][c]:
+                    c += 1
+                length = c - start
+                if length >= 2:
+                    for cc in range(start, start + length):
+                        consumed[r][cc] = True
+                    x = (start + quiet) * module_size
+                    y = (r + quiet) * module_size
+                    w = length * module_size
+                    h = module_size
+                    radius = h / 2  # rounded caps
+                    parts.append(
+                        f'<rect x="{x:.2f}" y="{y:.2f}" '
+                        f'width="{w:.2f}" height="{h:.2f}" '
+                        f'rx="{radius:.2f}" ry="{radius:.2f}"/>'
+                    )
+
+        # Pass 2 — vertical runs of length >= 2 over what's left
+        for c in range(n):
+            r = 0
+            while r < n:
+                if not is_data(r, c) or consumed[r][c]:
+                    r += 1
+                    continue
+                start = r
+                while r < n and is_data(r, c) and not consumed[r][c]:
+                    r += 1
+                length = r - start
+                if length >= 2:
+                    for rr in range(start, start + length):
+                        consumed[rr][c] = True
+                    x = (c + quiet) * module_size
+                    y = (start + quiet) * module_size
+                    w = module_size
+                    h = length * module_size
+                    radius = w / 2
+                    parts.append(
+                        f'<rect x="{x:.2f}" y="{y:.2f}" '
+                        f'width="{w:.2f}" height="{h:.2f}" '
+                        f'rx="{radius:.2f}" ry="{radius:.2f}"/>'
+                    )
+
+        # Pass 3 — leftover isolated modules become circles (the "dot" caps
+        # at line endpoints / standalone pixels in the reference).
+        dot_r = module_size * 0.5
+        for r in range(n):
+            for c in range(n):
+                if not is_data(r, c) or consumed[r][c]:
+                    continue
+                cx_d = (c + quiet + 0.5) * module_size
+                cy_d = (r + quiet + 0.5) * module_size
+                parts.append(
+                    f'<circle cx="{cx_d:.2f}" cy="{cy_d:.2f}" '
+                    f'r="{dot_r:.2f}"/>'
+                )
+
     parts.append('</g>')
 
     # finder patterns: outer ring (rounded square / circle) + inner center
