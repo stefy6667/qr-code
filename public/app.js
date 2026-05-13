@@ -80,6 +80,18 @@ const qrStylePresets = {
       colorStops: [[0, '#8b1cf6'], [0.52, '#d946ef'], [1, '#f97316']]
     },
     background: '#101010'
+  },
+  instagramGlow: {
+    label: 'Instagram Glow (fundal negru)',
+    engine: 'server-svg',
+    serverPreset: 'instagramGlow',
+    background: '#0a0a0a'
+  },
+  instagramGlowLight: {
+    label: 'Instagram Glow (fundal alb)',
+    engine: 'server-svg',
+    serverPreset: 'instagramGlowLight',
+    background: '#ffffff'
   }
 };
 
@@ -428,19 +440,58 @@ function buildQrRenderConfig(text, styleKey, size = 240) {
   };
 }
 
-function renderPrettyQr(canvas, text, styleKey, size = 240) {
-  if (!window.QrCreator || !canvas) return false;
+function buildServerSvgUrl(text, styleKey, size) {
+  const preset = getQrPreset(styleKey);
+  const serverPreset = preset.serverPreset || styleKey;
+  const params = new URLSearchParams({
+    data: text,
+    preset: serverPreset,
+    size: String(size)
+  });
+  return `/qr.svg?${params.toString()}`;
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(`Failed to load ${src}`));
+    img.src = src;
+  });
+}
+
+async function renderPrettyQr(canvas, text, styleKey, size = 240) {
+  if (!canvas) return false;
+  const preset = getQrPreset(styleKey);
   canvas.width = size;
   canvas.height = size;
+  if (preset.engine === 'server-svg') {
+    try {
+      const img = await loadImage(buildServerSvgUrl(text, styleKey, size));
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, size, size);
+      ctx.drawImage(img, 0, 0, size, size);
+      return true;
+    } catch (error) {
+      console.error('renderPrettyQr server-svg failed', error);
+      return false;
+    }
+  }
+  if (!window.QrCreator) return false;
   window.QrCreator.render(buildQrRenderConfig(text, styleKey, size), canvas);
   return true;
 }
 
-function downloadPrettyQr(text, styleKey, filename) {
-  if (!window.QrCreator) return window.open(text, '_blank');
-  const canvas = document.createElement('canvas');
+async function downloadPrettyQr(text, styleKey, filename) {
+  const preset = getQrPreset(styleKey);
   const size = 1200;
-  renderPrettyQr(canvas, text, styleKey, size);
+  // For both engines we rasterize to a canvas and export PNG — this keeps
+  // downloads consistent regardless of preset engine.
+  const canvas = document.createElement('canvas');
+  const ok = await renderPrettyQr(canvas, text, styleKey, size);
+  if (!ok && preset.engine !== 'server-svg' && !window.QrCreator) {
+    return window.open(text, '_blank');
+  }
   const link = document.createElement('a');
   link.href = canvas.toDataURL('image/png');
   link.download = `${filename}.png`;
@@ -448,9 +499,9 @@ function downloadPrettyQr(text, styleKey, filename) {
 }
 
 
-function createQrCanvasForMockup(url, styleKey, size = 620) {
+async function createQrCanvasForMockup(url, styleKey, size = 620) {
   const qrCanvas = document.createElement('canvas');
-  renderPrettyQr(qrCanvas, url, styleKey, size);
+  await renderPrettyQr(qrCanvas, url, styleKey, size);
   return qrCanvas;
 }
 
@@ -674,7 +725,7 @@ async function downloadGarmentMockup(url, styleKey, name, garment, color, templa
     }
   }
 
-  const qrCanvas = createQrCanvasForMockup(url, styleKey, 620);
+  const qrCanvas = await createQrCanvasForMockup(url, styleKey, 620);
   const qrX = 590;
   const qrY = garment === 'hoodie' ? 900 : 950;
   ctx.fillStyle = '#ffffff';
