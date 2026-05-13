@@ -81,6 +81,8 @@ def init_db():
         conn.execute("ALTER TABLE qr_codes ADD COLUMN like_count INTEGER NOT NULL DEFAULT 0")
     if 'dislike_count' not in columns:
         conn.execute("ALTER TABLE qr_codes ADD COLUMN dislike_count INTEGER NOT NULL DEFAULT 0")
+    if 'center_icon' not in columns:
+        conn.execute("ALTER TABLE qr_codes ADD COLUMN center_icon TEXT")
     conn.commit()
     conn.close()
 
@@ -383,6 +385,7 @@ class Handler(BaseHTTPRequestHandler):
                     'buttonLabel': row['review_button_label'] or 'Recenzii Google',
                 },
                 'qrStylePreset': row['qr_style_preset'] or 'aurora',
+                'centerIcon': row['center_icon'] or '',
                 'productTemplates': product_templates,
                 'scanCount': row['scan_count'] or 0,
                 'likeCount': row['like_count'] or 0,
@@ -441,6 +444,9 @@ class Handler(BaseHTTPRequestHandler):
                 if not val.startswith('#'):
                     val = '#' + val
                 kwargs[key] = val
+        icon = (params.get('icon', [''])[0] or '').strip().lower()
+        if icon in {'facebook', 'instagram', 'tiktok'}:
+            kwargs['center_icon'] = icon
         try:
             svg = qr_style.build_svg(data, size=size, preset=preset, **kwargs)
         except Exception as e:
@@ -451,7 +457,7 @@ class Handler(BaseHTTPRequestHandler):
         """/qr/<slug>.svg — encodes the public scan URL, uses preset from DB."""
         conn = db()
         row = conn.execute(
-            'SELECT slug, qr_style_preset FROM qr_codes WHERE slug = ?',
+            'SELECT slug, qr_style_preset, center_icon FROM qr_codes WHERE slug = ?',
             (slug,),
         ).fetchone()
         conn.close()
@@ -465,9 +471,18 @@ class Handler(BaseHTTPRequestHandler):
         preset = (params.get('preset', [None])[0]
                   or row['qr_style_preset']
                   or 'instagramGlow')
+        # icon: query param overrides DB; explicit ?icon=none clears it
+        icon_override = (params.get('icon', [None])[0] or '').strip().lower()
+        if icon_override == 'none':
+            icon = None
+        elif icon_override in {'facebook', 'instagram', 'tiktok'}:
+            icon = icon_override
+        else:
+            stored = (row['center_icon'] or '').strip().lower()
+            icon = stored if stored in {'facebook', 'instagram', 'tiktok'} else None
         scan_url = f'{BASE_URL}/c/{row["slug"]}'
         try:
-            svg = qr_style.build_svg(scan_url, size=size, preset=preset)
+            svg = qr_style.build_svg(scan_url, size=size, preset=preset, center_icon=icon)
         except Exception as e:
             return self.send_error(500, f'QR generation failed: {e}')
         return svg_response(self, svg)
@@ -485,18 +500,20 @@ class Handler(BaseHTTPRequestHandler):
         review_embed_url = (body.get('googleReviews', {}).get('embedUrl') or '').strip()
         review_button_label = (body.get('googleReviews', {}).get('buttonLabel') or 'Recenzii Google').strip()
         qr_style_preset = (body.get('qrStylePreset') or 'aurora').strip() or 'aurora'
+        center_icon_raw = (body.get('centerIcon') or '').strip().lower()
+        center_icon = center_icon_raw if center_icon_raw in {'facebook', 'instagram', 'tiktok'} else None
         product_templates = body.get('productTemplates') if isinstance(body.get('productTemplates'), dict) else {}
         product_templates_json = json.dumps(product_templates)
         title = (body.get('title') or '').strip()
         if title:
             conn.execute(
-                'UPDATE qr_codes SET title = ?, reviews_enabled = ?, review_embed_url = ?, review_button_label = ?, qr_style_preset = ?, product_templates_json = ?, updated_at = CURRENT_TIMESTAMP WHERE slug = ?',
-                (title, reviews_enabled, review_embed_url, review_button_label, qr_style_preset, product_templates_json, slug),
+                'UPDATE qr_codes SET title = ?, reviews_enabled = ?, review_embed_url = ?, review_button_label = ?, qr_style_preset = ?, center_icon = ?, product_templates_json = ?, updated_at = CURRENT_TIMESTAMP WHERE slug = ?',
+                (title, reviews_enabled, review_embed_url, review_button_label, qr_style_preset, center_icon, product_templates_json, slug),
             )
         else:
             conn.execute(
-                'UPDATE qr_codes SET reviews_enabled = ?, review_embed_url = ?, review_button_label = ?, qr_style_preset = ?, product_templates_json = ?, updated_at = CURRENT_TIMESTAMP WHERE slug = ?',
-                (reviews_enabled, review_embed_url, review_button_label, qr_style_preset, product_templates_json, slug),
+                'UPDATE qr_codes SET reviews_enabled = ?, review_embed_url = ?, review_button_label = ?, qr_style_preset = ?, center_icon = ?, product_templates_json = ?, updated_at = CURRENT_TIMESTAMP WHERE slug = ?',
+                (reviews_enabled, review_embed_url, review_button_label, qr_style_preset, center_icon, product_templates_json, slug),
             )
         conn.commit()
         conn.close()

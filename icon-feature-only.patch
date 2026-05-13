@@ -1,0 +1,761 @@
+diff --git a/public/app.js b/public/app.js
+index fe07322..8eeef40 100644
+--- a/public/app.js
++++ b/public/app.js
+@@ -80,6 +80,18 @@ const qrStylePresets = {
+       colorStops: [[0, '#8b1cf6'], [0.52, '#d946ef'], [1, '#f97316']]
+     },
+     background: '#101010'
++  },
++  instagramGlow: {
++    label: 'Instagram Glow (fundal negru)',
++    engine: 'server-svg',
++    serverPreset: 'instagramGlow',
++    background: '#0a0a0a'
++  },
++  instagramGlowLight: {
++    label: 'Instagram Glow (fundal alb)',
++    engine: 'server-svg',
++    serverPreset: 'instagramGlowLight',
++    background: '#ffffff'
+   }
+ };
+ 
+@@ -207,10 +219,10 @@ async function renderAdmin() {
+           <article class="card qr-item">
+             <div>
+               <div class="qr-preview-card ${item.qrStylePreset || 'aurora'}">
+-                <canvas class="qr-canvas" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-size="170"></canvas>
++                <canvas class="qr-canvas" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-icon="${escapeAttribute(item.centerIcon || '')}" data-qr-size="170"></canvas>
+               </div>
+               <div class="actions" style="margin-top:12px">
+-                <button type="button" class="download-qr-btn" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-name="${escapeAttribute(item.slug)}">Download PNG</button>
++                <button type="button" class="download-qr-btn" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-icon="${escapeAttribute(item.centerIcon || '')}" data-qr-name="${escapeAttribute(item.slug)}">Download PNG</button>
+                 <button type="button" class="secondary template-print-btn" data-template='${escapeAttribute(JSON.stringify({
+                   slug: item.slug,
+                   title: item.title,
+@@ -218,10 +230,10 @@ async function renderAdmin() {
+                   scanUrl: item.scanUrl,
+                   qrImageUrl: item.qrImageUrl
+                 }))}'>Template print</button>
+-                <button type="button" class="secondary garment-mockup-btn" data-garment="tshirt" data-garment-color="white" data-template-image="${escapeAttribute(item.productTemplates?.tshirtWhite || '')}" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-name="${escapeAttribute(item.slug)}">Tricou alb</button>
+-                <button type="button" class="secondary garment-mockup-btn" data-garment="tshirt" data-garment-color="black" data-template-image="${escapeAttribute(item.productTemplates?.tshirtBlack || '')}" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-name="${escapeAttribute(item.slug)}">Tricou negru</button>
+-                <button type="button" class="secondary garment-mockup-btn" data-garment="hoodie" data-garment-color="white" data-template-image="${escapeAttribute(item.productTemplates?.hoodieWhite || '')}" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-name="${escapeAttribute(item.slug)}">Hanorac alb</button>
+-                <button type="button" class="secondary garment-mockup-btn" data-garment="hoodie" data-garment-color="black" data-template-image="${escapeAttribute(item.productTemplates?.hoodieBlack || '')}" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-name="${escapeAttribute(item.slug)}">Hanorac negru</button>
++                <button type="button" class="secondary garment-mockup-btn" data-garment="tshirt" data-garment-color="white" data-template-image="${escapeAttribute(item.productTemplates?.tshirtWhite || '')}" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-icon="${escapeAttribute(item.centerIcon || '')}" data-qr-name="${escapeAttribute(item.slug)}">Tricou alb</button>
++                <button type="button" class="secondary garment-mockup-btn" data-garment="tshirt" data-garment-color="black" data-template-image="${escapeAttribute(item.productTemplates?.tshirtBlack || '')}" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-icon="${escapeAttribute(item.centerIcon || '')}" data-qr-name="${escapeAttribute(item.slug)}">Tricou negru</button>
++                <button type="button" class="secondary garment-mockup-btn" data-garment="hoodie" data-garment-color="white" data-template-image="${escapeAttribute(item.productTemplates?.hoodieWhite || '')}" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-icon="${escapeAttribute(item.centerIcon || '')}" data-qr-name="${escapeAttribute(item.slug)}">Hanorac alb</button>
++                <button type="button" class="secondary garment-mockup-btn" data-garment="hoodie" data-garment-color="black" data-template-image="${escapeAttribute(item.productTemplates?.hoodieBlack || '')}" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-icon="${escapeAttribute(item.centerIcon || '')}" data-qr-name="${escapeAttribute(item.slug)}">Hanorac negru</button>
+               </div>
+             </div>
+             <div>
+@@ -237,6 +249,14 @@ async function renderAdmin() {
+                 <label>Google Embed URL<input name="reviewEmbedUrl" value="${escapeHtml(item.googleReviews?.embedUrl || '')}" placeholder="https://www.google.com/maps/embed?..." /></label>
+                 <label>Text buton recenzii<input name="reviewButtonLabel" value="${escapeHtml(item.googleReviews?.buttonLabel || 'Recenzii Google')}" /></label>
+                 <label>Stil QR<select name="qrStylePreset">${Object.entries(qrStylePresets).map(([key, preset]) => `<option value="${key}" ${item.qrStylePreset === key ? 'selected' : ''}>${preset.label}</option>`).join('')}</select></label>
++                <div class="icon-picker">
++                  <span class="icon-picker-label">Icon central:</span>
++                  <input type="hidden" name="centerIcon" value="${escapeAttribute(item.centerIcon || '')}" />
++                  <button type="button" class="icon-btn ${!item.centerIcon ? 'active' : ''}" data-icon-value="">Fără</button>
++                  <button type="button" class="icon-btn ${item.centerIcon === 'facebook' ? 'active' : ''}" data-icon-value="facebook" title="Facebook"><span class="icon-swatch icon-fb">f</span> Facebook</button>
++                  <button type="button" class="icon-btn ${item.centerIcon === 'instagram' ? 'active' : ''}" data-icon-value="instagram" title="Instagram"><span class="icon-swatch icon-ig">◉</span> Instagram</button>
++                  <button type="button" class="icon-btn ${item.centerIcon === 'tiktok' ? 'active' : ''}" data-icon-value="tiktok" title="TikTok"><span class="icon-swatch icon-tt">♪</span> TikTok</button>
++                </div>
+                 <label>Template tricou alb (fără cod)<input type="file" name="tplTshirtWhiteFile" accept="image/png,image/jpeg,image/webp" /></label>
+                 <label>Template tricou negru (fără cod)<input type="file" name="tplTshirtBlackFile" accept="image/png,image/jpeg,image/webp" /></label>
+                 <label>Template hanorac alb (fără cod)<input type="file" name="tplHoodieWhiteFile" accept="image/png,image/jpeg,image/webp" /></label>
+@@ -292,6 +312,7 @@ async function renderAdmin() {
+               buttonLabel: formData.get('reviewButtonLabel'),
+             },
+             qrStylePreset: formData.get('qrStylePreset'),
++            centerIcon: formData.get('centerIcon') || '',
+             productTemplates
+           })
+         });
+@@ -428,19 +449,59 @@ function buildQrRenderConfig(text, styleKey, size = 240) {
+   };
+ }
+ 
+-function renderPrettyQr(canvas, text, styleKey, size = 240) {
+-  if (!window.QrCreator || !canvas) return false;
++function buildServerSvgUrl(text, styleKey, size, icon) {
++  const preset = getQrPreset(styleKey);
++  const serverPreset = preset.serverPreset || styleKey;
++  const params = new URLSearchParams({
++    data: text,
++    preset: serverPreset,
++    size: String(size)
++  });
++  if (icon && ['facebook', 'instagram', 'tiktok'].includes(icon)) {
++    params.set('icon', icon);
++  }
++  return `/qr.svg?${params.toString()}`;
++}
++
++function loadImage(src) {
++  return new Promise((resolve, reject) => {
++    const img = new Image();
++    img.onload = () => resolve(img);
++    img.onerror = () => reject(new Error(`Failed to load ${src}`));
++    img.src = src;
++  });
++}
++
++async function renderPrettyQr(canvas, text, styleKey, size = 240, icon = null) {
++  if (!canvas) return false;
++  const preset = getQrPreset(styleKey);
+   canvas.width = size;
+   canvas.height = size;
++  if (preset.engine === 'server-svg') {
++    try {
++      const img = await loadImage(buildServerSvgUrl(text, styleKey, size, icon));
++      const ctx = canvas.getContext('2d');
++      ctx.clearRect(0, 0, size, size);
++      ctx.drawImage(img, 0, 0, size, size);
++      return true;
++    } catch (error) {
++      console.error('renderPrettyQr server-svg failed', error);
++      return false;
++    }
++  }
++  if (!window.QrCreator) return false;
+   window.QrCreator.render(buildQrRenderConfig(text, styleKey, size), canvas);
+   return true;
+ }
+ 
+-function downloadPrettyQr(text, styleKey, filename) {
+-  if (!window.QrCreator) return window.open(text, '_blank');
+-  const canvas = document.createElement('canvas');
++async function downloadPrettyQr(text, styleKey, filename, icon = null) {
++  const preset = getQrPreset(styleKey);
+   const size = 1200;
+-  renderPrettyQr(canvas, text, styleKey, size);
++  const canvas = document.createElement('canvas');
++  const ok = await renderPrettyQr(canvas, text, styleKey, size, icon);
++  if (!ok && preset.engine !== 'server-svg' && !window.QrCreator) {
++    return window.open(text, '_blank');
++  }
+   const link = document.createElement('a');
+   link.href = canvas.toDataURL('image/png');
+   link.download = `${filename}.png`;
+@@ -448,9 +509,9 @@ function downloadPrettyQr(text, styleKey, filename) {
+ }
+ 
+ 
+-function createQrCanvasForMockup(url, styleKey, size = 620) {
++async function createQrCanvasForMockup(url, styleKey, size = 620, icon = null) {
+   const qrCanvas = document.createElement('canvas');
+-  renderPrettyQr(qrCanvas, url, styleKey, size);
++  await renderPrettyQr(qrCanvas, url, styleKey, size, icon);
+   return qrCanvas;
+ }
+ 
+@@ -638,7 +699,7 @@ function loadImage(url) {
+   });
+ }
+ 
+-async function downloadGarmentMockup(url, styleKey, name, garment, color, templateImage) {
++async function downloadGarmentMockup(url, styleKey, name, garment, color, templateImage, icon = null) {
+   const canvas = document.createElement('canvas');
+   canvas.width = 1800;
+   canvas.height = 2200;
+@@ -674,7 +735,7 @@ async function downloadGarmentMockup(url, styleKey, name, garment, color, templa
+     }
+   }
+ 
+-  const qrCanvas = createQrCanvasForMockup(url, styleKey, 620);
++  const qrCanvas = await createQrCanvasForMockup(url, styleKey, 620, icon);
+   const qrX = 590;
+   const qrY = garment === 'hoodie' ? 900 : 950;
+   ctx.fillStyle = '#ffffff';
+@@ -799,10 +860,20 @@ function openPrintTemplateCard(item) {
+ 
+ function renderAdminQrCodes() {
+   document.querySelectorAll('.qr-canvas').forEach((canvas) => {
+-    renderPrettyQr(canvas, canvas.dataset.qrUrl, canvas.dataset.qrStyle, Number(canvas.dataset.qrSize || 170));
++    renderPrettyQr(canvas, canvas.dataset.qrUrl, canvas.dataset.qrStyle, Number(canvas.dataset.qrSize || 170), canvas.dataset.qrIcon || null);
+   });
+   document.querySelectorAll('.download-qr-btn').forEach((button) => {
+-    button.onclick = () => downloadPrettyQr(button.dataset.qrUrl, button.dataset.qrStyle, button.dataset.qrName || 'qr-code');
++    button.onclick = () => downloadPrettyQr(button.dataset.qrUrl, button.dataset.qrStyle, button.dataset.qrName || 'qr-code', button.dataset.qrIcon || null);
++  });
++  document.querySelectorAll('.icon-picker').forEach((picker) => {
++    const hidden = picker.querySelector('input[name="centerIcon"]');
++    picker.querySelectorAll('.icon-btn').forEach((btn) => {
++      btn.onclick = () => {
++        hidden.value = btn.dataset.iconValue || '';
++        picker.querySelectorAll('.icon-btn').forEach((b) => b.classList.remove('active'));
++        btn.classList.add('active');
++      };
++    });
+   });
+   document.querySelectorAll('.template-print-btn').forEach((button) => {
+     button.onclick = () => {
+@@ -821,7 +892,8 @@ function renderAdminQrCodes() {
+         button.dataset.qrName || 'qr-code',
+         button.dataset.garment || 'tshirt',
+         button.dataset.garmentColor || 'white',
+-        button.dataset.templateImage || ''
++        button.dataset.templateImage || '',
++        button.dataset.qrIcon || null
+       );
+     };
+   });
+diff --git a/public/styles.css b/public/styles.css
+index 35a68ae..473e5aa 100644
+--- a/public/styles.css
++++ b/public/styles.css
+@@ -365,3 +365,58 @@ button.danger { background: linear-gradient(135deg, var(--danger), #be123c); }
+ .sound-unlock-btn:focus-visible {
+   opacity: 0.35;
+ }
++
++.icon-picker {
++  display: flex;
++  flex-wrap: wrap;
++  align-items: center;
++  gap: 8px;
++  margin: 6px 0 12px;
++}
++.icon-picker-label {
++  font-size: 0.85rem;
++  color: #94a3b8;
++  margin-right: 4px;
++}
++.icon-btn {
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
++  padding: 6px 12px;
++  font-size: 0.85rem;
++  font-weight: 600;
++  border: 1px solid rgba(148, 163, 184, 0.3);
++  border-radius: 999px;
++  background: rgba(15, 23, 42, 0.4);
++  color: #e2e8f0;
++  cursor: pointer;
++  transition: all 0.15s ease;
++}
++.icon-btn:hover {
++  border-color: rgba(148, 163, 184, 0.6);
++  background: rgba(30, 41, 59, 0.5);
++}
++.icon-btn.active {
++  border-color: #f97316;
++  background: rgba(249, 115, 22, 0.15);
++  color: #fff;
++  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.25);
++}
++.icon-swatch {
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  width: 18px;
++  height: 18px;
++  border-radius: 4px;
++  font-size: 11px;
++  font-weight: 900;
++  color: #fff;
++  line-height: 1;
++}
++.icon-swatch.icon-fb { background: #1877F2; }
++.icon-swatch.icon-ig {
++  background: linear-gradient(135deg, #FCAF45 0%, #E1306C 50%, #5B51D8 100%);
++  font-size: 12px;
++}
++.icon-swatch.icon-tt { background: #000; }
+diff --git a/qr_style.py b/qr_style.py
+new file mode 100644
+index 0000000..6ea51e0
+--- /dev/null
++++ b/qr_style.py
+@@ -0,0 +1,321 @@
++"""
++Stylized QR code SVG generator.
++
++Renders QR codes with:
++ - rounded-square ring finder patterns (the 3 corner squares), à la Instagram
++ - rounded/dot data modules
++ - linear gradient fill (configurable colors)
++ - configurable background
++
++Uses error correction level H (~30%) so the stylization stays well within
++the QR spec's recoverable noise margin, keeping scans reliable across phones.
++"""
++
++import os
++import sys
++
++# Make the vendored copy of segno importable. We prepend `vendor/` only if the
++# package isn't already importable, so pip-installed environments keep working.
++_VENDOR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'vendor')
++if os.path.isdir(os.path.join(_VENDOR, 'segno')) and _VENDOR not in sys.path:
++    sys.path.insert(0, _VENDOR)
++
++
++# Named presets. Keep the keys in sync with the frontend `qrStylePresets`.
++PRESETS = {
++    'instagramGlow': {
++        'gradient_top': '#8B5CF6',     # violet
++        'gradient_mid': '#EC4899',     # pink
++        'gradient_bottom': '#F97316',  # orange
++        'background': '#0a0a0a',       # near-black, matches reference
++        'finder_corner_radius_modules': 1.8,  # how rounded the outer finder ring is
++        'finder_center_radius_modules': 0.9,  # how rounded the inner finder square is
++        'dot_radius_factor': 0.5,             # 0..0.5; 0.5 = circles fill their cell
++    },
++    'instagramGlowLight': {
++        'gradient_top': '#7C3AED',
++        'gradient_mid': '#DB2777',
++        'gradient_bottom': '#EA580C',
++        'background': '#FFFFFF',
++        'finder_corner_radius_modules': 1.8,
++        'finder_center_radius_modules': 0.9,
++        'dot_radius_factor': 0.5,
++    },
++}
++
++
++# Brand icons placed in the center of the QR.
++# Each entry holds the brand-colored backdrop spec + the foreground shapes.
++# Rendered into an `icon_size`-wide square centered at (cx, cy).
++# `icon_size` is the FULL icon span; inside, we draw a white "halo" rounded
++# square (so the icon stands out against any QR background) and then the
++# brand square with the glyph.
++SUPPORTED_ICONS = {'facebook', 'instagram', 'tiktok'}
++
++
++def _center_icon_svg(icon_key: str, cx: float, cy: float, icon_size: float) -> str:
++    """Build SVG fragment for a centered brand icon."""
++    halo_r = icon_size * 0.20
++    parts = [
++        # white halo so the icon reads against any background
++        f'<rect x="{cx - icon_size / 2:.2f}" y="{cy - icon_size / 2:.2f}" '
++        f'width="{icon_size:.2f}" height="{icon_size:.2f}" '
++        f'rx="{halo_r:.2f}" ry="{halo_r:.2f}" fill="#ffffff"/>'
++    ]
++    pad = icon_size * 0.10
++    inner = icon_size - pad * 2
++    ix = cx - inner / 2
++    iy = cy - inner / 2
++    inner_r = inner * 0.20
++
++    if icon_key == 'facebook':
++        parts.append(
++            f'<rect x="{ix:.2f}" y="{iy:.2f}" width="{inner:.2f}" height="{inner:.2f}" '
++            f'rx="{inner_r:.2f}" ry="{inner_r:.2f}" fill="#1877F2"/>'
++        )
++        # Stylized lowercase "f" built from a single path so it doesn't depend on
++        # any system font when the SVG is rasterized into a canvas.
++        # Coordinates are expressed as offsets from (ix, iy) on an `inner`-sized box.
++        s = inner
++        # Pre-compute key points; the f sits roughly centered in the inner box,
++        # with its vertical stroke slightly right of center.
++        x_stem = ix + s * 0.50
++        x_stem_r = ix + s * 0.66
++        x_left = ix + s * 0.35
++        x_right = ix + s * 0.78
++        y_top = iy + s * 0.16
++        y_hook = iy + s * 0.30
++        y_bar_top = iy + s * 0.42
++        y_bar_bot = iy + s * 0.56
++        y_bot = iy + s * 0.86
++        parts.append(
++            '<path fill="#ffffff" d="'
++            f'M {x_right:.2f} {y_top:.2f} '
++            f'L {x_right - s * 0.04:.2f} {y_bar_bot:.2f} '
++            f'L {x_stem_r:.2f} {y_bar_bot:.2f} '
++            f'L {x_stem_r:.2f} {y_bot:.2f} '
++            f'L {x_stem:.2f} {y_bot:.2f} '
++            f'L {x_stem:.2f} {y_bar_bot:.2f} '
++            f'L {x_left:.2f} {y_bar_bot:.2f} '
++            f'L {x_left:.2f} {y_bar_top:.2f} '
++            f'L {x_stem:.2f} {y_bar_top:.2f} '
++            f'L {x_stem:.2f} {y_hook:.2f} '
++            f'Q {x_stem:.2f} {y_top:.2f} {x_stem + s * 0.14:.2f} {y_top:.2f} '
++            'Z"/>'
++        )
++    elif icon_key == 'instagram':
++        # Instagram brand gradient (diagonal yellow → magenta → purple)
++        grad_id = 'igGrad'
++        parts.append(
++            f'<defs><linearGradient id="{grad_id}" x1="0" y1="1" x2="1" y2="0">'
++            '<stop offset="0%" stop-color="#FCAF45"/>'
++            '<stop offset="50%" stop-color="#E1306C"/>'
++            '<stop offset="100%" stop-color="#5B51D8"/>'
++            '</linearGradient></defs>'
++            f'<rect x="{ix:.2f}" y="{iy:.2f}" width="{inner:.2f}" height="{inner:.2f}" '
++            f'rx="{inner_r:.2f}" ry="{inner_r:.2f}" fill="url(#{grad_id})"/>'
++        )
++        # Camera outline (rounded rect) + inner lens circle + top-right indicator dot
++        stroke = inner * 0.08
++        cam_pad = inner * 0.20
++        cam_x = ix + cam_pad
++        cam_y = iy + cam_pad
++        cam_s = inner - 2 * cam_pad
++        cam_r = cam_s * 0.24
++        lens_r = cam_s * 0.22
++        dot_r = cam_s * 0.06
++        dot_offset = cam_s * 0.18
++        parts.append(
++            f'<rect x="{cam_x:.2f}" y="{cam_y:.2f}" width="{cam_s:.2f}" height="{cam_s:.2f}" '
++            f'rx="{cam_r:.2f}" ry="{cam_r:.2f}" fill="none" '
++            f'stroke="#ffffff" stroke-width="{stroke:.2f}"/>'
++            f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{lens_r:.2f}" fill="none" '
++            f'stroke="#ffffff" stroke-width="{stroke:.2f}"/>'
++            f'<circle cx="{cam_x + cam_s - dot_offset:.2f}" cy="{cam_y + dot_offset:.2f}" '
++            f'r="{dot_r:.2f}" fill="#ffffff"/>'
++        )
++    elif icon_key == 'tiktok':
++        parts.append(
++            f'<rect x="{ix:.2f}" y="{iy:.2f}" width="{inner:.2f}" height="{inner:.2f}" '
++            f'rx="{inner_r:.2f}" ry="{inner_r:.2f}" fill="#000000"/>'
++        )
++        # TikTok "d" mark: vertical stroke that hooks at the top, plus a
++        # filled circle bottom-left (the eighth-note bubble).
++        s = inner
++        stem_w = s * 0.13
++        stem_x = ix + s * 0.55
++        stem_top = iy + s * 0.18
++        stem_bot = iy + s * 0.68
++        # Stem
++        parts.append(
++            f'<rect x="{stem_x:.2f}" y="{stem_top:.2f}" '
++            f'width="{stem_w:.2f}" height="{stem_bot - stem_top:.2f}" fill="#ffffff"/>'
++        )
++        # Hook at top of stem extending right
++        hook_w = s * 0.18
++        hook_h = s * 0.13
++        parts.append(
++            f'<rect x="{stem_x:.2f}" y="{stem_top:.2f}" '
++            f'width="{hook_w:.2f}" height="{hook_h:.2f}" fill="#ffffff"/>'
++        )
++        # Filled bubble bottom-left
++        bubble_r = s * 0.14
++        bubble_cx = stem_x - s * 0.08
++        bubble_cy = stem_bot + s * 0.02
++        parts.append(
++            f'<circle cx="{bubble_cx:.2f}" cy="{bubble_cy:.2f}" r="{bubble_r:.2f}" '
++            f'fill="#ffffff"/>'
++        )
++        # Cyan ghost (offset down-left a touch) to evoke the brand's chromatic mark
++        parts.append(
++            f'<circle cx="{bubble_cx - s * 0.04:.2f}" cy="{bubble_cy + s * 0.02:.2f}" '
++            f'r="{bubble_r * 0.55:.2f}" fill="#25F4EE" opacity="0.85"/>'
++        )
++        # Magenta ghost (offset up-right a touch)
++        parts.append(
++            f'<circle cx="{bubble_cx + s * 0.04:.2f}" cy="{bubble_cy - s * 0.02:.2f}" '
++            f'r="{bubble_r * 0.55:.2f}" fill="#FE2C55" opacity="0.85"/>'
++        )
++    return ''.join(parts)
++
++
++def _rounded_rect_path(x: float, y: float, w: float, h: float, r: float) -> str:
++    """Clockwise rounded-rect subpath ending with z. r is corner radius."""
++    return (
++        f'M {x + r} {y} '
++        f'h {w - 2 * r} a {r} {r} 0 0 1 {r} {r} '
++        f'v {h - 2 * r} a {r} {r} 0 0 1 {-r} {r} '
++        f'h {-(w - 2 * r)} a {r} {r} 0 0 1 {-r} {-r} '
++        f'v {-(h - 2 * r)} a {r} {r} 0 0 1 {r} {-r} z'
++    )
++
++
++def build_svg(
++    data: str,
++    size: int = 1200,
++    preset: str = 'instagramGlow',
++    gradient_top: str = None,
++    gradient_mid: str = None,
++    gradient_bottom: str = None,
++    background: str = None,
++    center_icon: str = None,
++) -> str:
++    """
++    Return an SVG string for the given data, styled per `preset` with
++    optional color overrides and an optional center brand icon
++    (`facebook` / `instagram` / `tiktok`).
++    """
++    try:
++        import segno
++    except ImportError as e:
++        raise RuntimeError(
++            "The 'segno' package is required for styled QR generation. "
++            "Add `pip install -r requirements.txt` to your build command."
++        ) from e
++
++    cfg = dict(PRESETS.get(preset) or PRESETS['instagramGlow'])
++    if gradient_top:
++        cfg['gradient_top'] = gradient_top
++    if gradient_mid:
++        cfg['gradient_mid'] = gradient_mid
++    if gradient_bottom:
++        cfg['gradient_bottom'] = gradient_bottom
++    if background:
++        cfg['background'] = background
++
++    icon_key = center_icon if center_icon in SUPPORTED_ICONS else None
++
++    qr = segno.make(data, error='h', boost_error=False)
++    matrix = qr.matrix
++    n = len(matrix)
++    quiet = 4
++    total = n + quiet * 2
++    module_size = size / total
++
++    finder_positions = [(0, 0), (0, n - 7), (n - 7, 0)]
++
++    def in_finder(r: int, c: int) -> bool:
++        for fr, fc in finder_positions:
++            if fr <= r < fr + 7 and fc <= c < fc + 7:
++                return True
++        return False
++
++    # Center icon footprint (in matrix coords). Icon spans ~22% of the QR
++    # data area; at error-correction H this stays well within the ~30%
++    # recoverable margin. We also clear a slightly larger "blanking" area
++    # so the icon's halo doesn't touch any module.
++    icon_modules = 0
++    icon_size_px = 0.0
++    if icon_key:
++        icon_modules = max(5, int(round(n * 0.22)))
++        # Round up to odd so the icon centers on a module
++        if icon_modules % 2 == 0:
++            icon_modules += 1
++        icon_size_px = icon_modules * module_size
++    center_r = n // 2
++    center_c = n // 2
++    half = icon_modules // 2
++
++    def in_icon(r: int, c: int) -> bool:
++        if not icon_key:
++            return False
++        return (center_r - half <= r <= center_r + half
++                and center_c - half <= c <= center_c + half)
++
++    parts = [
++        f'<svg xmlns="http://www.w3.org/2000/svg" '
++        f'viewBox="0 0 {size} {size}" width="{size}" height="{size}" '
++        f'shape-rendering="geometricPrecision">',
++        '<defs>',
++        '<linearGradient id="qrGrad" x1="0" y1="0" x2="0" y2="1">',
++        f'<stop offset="0%" stop-color="{cfg["gradient_top"]}"/>',
++        f'<stop offset="50%" stop-color="{cfg["gradient_mid"]}"/>',
++        f'<stop offset="100%" stop-color="{cfg["gradient_bottom"]}"/>',
++        '</linearGradient>',
++        '</defs>',
++        f'<rect width="{size}" height="{size}" fill="{cfg["background"]}"/>',
++    ]
++
++    # data modules
++    r_dot = module_size * cfg['dot_radius_factor']
++    parts.append('<g fill="url(#qrGrad)">')
++    for r, row in enumerate(matrix):
++        for c, val in enumerate(row):
++            if not val or in_finder(r, c) or in_icon(r, c):
++                continue
++            cx = (c + quiet + 0.5) * module_size
++            cy = (r + quiet + 0.5) * module_size
++            parts.append(f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{r_dot:.2f}"/>')
++    parts.append('</g>')
++
++    # finder patterns: rounded-square ring + inner rounded-square dot
++    outer_r = module_size * cfg['finder_corner_radius_modules']
++    inner_r = module_size * cfg['finder_corner_radius_modules'] * 0.72
++    center_r = module_size * cfg['finder_center_radius_modules']
++    parts.append('<g fill="url(#qrGrad)" fill-rule="evenodd">')
++    for fr, fc in finder_positions:
++        x = (fc + quiet) * module_size
++        y = (fr + quiet) * module_size
++        ring_d = (
++            _rounded_rect_path(x, y, 7 * module_size, 7 * module_size, outer_r)
++            + ' '
++            + _rounded_rect_path(x + module_size, y + module_size,
++                                 5 * module_size, 5 * module_size, inner_r)
++        )
++        parts.append(f'<path d="{ring_d}"/>')
++        parts.append(
++            f'<rect x="{x + 2 * module_size:.2f}" y="{y + 2 * module_size:.2f}" '
++            f'width="{3 * module_size:.2f}" height="{3 * module_size:.2f}" '
++            f'rx="{center_r:.2f}" ry="{center_r:.2f}"/>'
++        )
++    parts.append('</g>')
++
++    # center brand icon overlay (rendered last so it sits on top of any data)
++    if icon_key and icon_size_px > 0:
++        # Slightly shrink the visual icon vs the blanked module area so the
++        # icon's halo doesn't visually touch nearby modules.
++        visual_size = icon_size_px * 0.88
++        parts.append(_center_icon_svg(icon_key, size / 2, size / 2, visual_size))
++
++    parts.append('</svg>')
++    return ''.join(parts)
+diff --git a/requirements.txt b/requirements.txt
+new file mode 100644
+index 0000000..8601458
+--- /dev/null
++++ b/requirements.txt
+@@ -0,0 +1 @@
++segno==1.6.1
+diff --git a/server.py b/server.py
+index 6fcd25a..49d8ed3 100644
+--- a/server.py
++++ b/server.py
+@@ -14,6 +14,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+ from pathlib import Path
+ from urllib.parse import parse_qs, quote, urlparse
+ 
++import qr_style
++
+ ROOT = Path(__file__).resolve().parent
+ DATA_ROOT = Path(os.environ.get('DATA_ROOT', str(ROOT / 'data'))).resolve()
+ UPLOAD_DIR = Path(os.environ.get('UPLOAD_DIR', str(DATA_ROOT / 'uploads'))).resolve()
+@@ -79,6 +81,8 @@ def init_db():
+         conn.execute("ALTER TABLE qr_codes ADD COLUMN like_count INTEGER NOT NULL DEFAULT 0")
+     if 'dislike_count' not in columns:
+         conn.execute("ALTER TABLE qr_codes ADD COLUMN dislike_count INTEGER NOT NULL DEFAULT 0")
++    if 'center_icon' not in columns:
++        conn.execute("ALTER TABLE qr_codes ADD COLUMN center_icon TEXT")
+     conn.commit()
+     conn.close()
+ 
+@@ -126,6 +130,20 @@ def xml_response(handler, xml: str, status=200):
+     handler.wfile.write(data)
+ 
+ 
++def svg_response(handler, svg: str, status=200, cacheable: bool = True):
++    data = svg.encode('utf-8')
++    handler.send_response(status)
++    handler.send_header('Content-Type', 'image/svg+xml; charset=utf-8')
++    handler.send_header('Content-Length', str(len(data)))
++    # The QR design is deterministic per (data, preset, size, colors).
++    # Browsers can cache it; we send no-store for safety on the per-slug
++    # endpoint since BASE_URL changes would change the encoded payload.
++    handler.send_header('Cache-Control', 'public, max-age=3600' if cacheable else 'no-store')
++    handler.send_header('Access-Control-Allow-Origin', '*')
++    handler.end_headers()
++    handler.wfile.write(data)
++
++
+ def parse_body(handler):
+     length = int(handler.headers.get('Content-Length', '0'))
+     raw = handler.rfile.read(length) if length else b'{}'
+@@ -204,6 +222,11 @@ class Handler(BaseHTTPRequestHandler):
+         if path.startswith('/api/public/qr/'):
+             slug = path.split('/')[-1]
+             return self.handle_public_qr(slug)
++        if path == '/qr.svg':
++            return self.handle_qr_svg_raw(parsed)
++        if path.startswith('/qr/') and path.endswith('.svg'):
++            slug = path[len('/qr/'):-len('.svg')]
++            return self.handle_qr_svg_for_slug(slug, parsed)
+         if path == '/':
+             return self.serve_file(PUBLIC_DIR / 'index.html', content_type='text/html; charset=utf-8')
+         if path == '/admin' or path.startswith('/admin/'):
+@@ -362,6 +385,7 @@ class Handler(BaseHTTPRequestHandler):
+                     'buttonLabel': row['review_button_label'] or 'Recenzii Google',
+                 },
+                 'qrStylePreset': row['qr_style_preset'] or 'aurora',
++                'centerIcon': row['center_icon'] or '',
+                 'productTemplates': product_templates,
+                 'scanCount': row['scan_count'] or 0,
+                 'likeCount': row['like_count'] or 0,
+@@ -397,6 +421,72 @@ class Handler(BaseHTTPRequestHandler):
+         )
+         return xml_response(self, twiml)
+ 
++    def handle_qr_svg_raw(self, parsed):
++        """Generic SVG generator: /qr.svg?data=...&preset=...&size=...
++
++        Used for previews / arbitrary URLs (e.g. before a code is saved).
++        """
++        params = parse_qs(parsed.query)
++        data = (params.get('data', [''])[0] or '').strip()
++        if not data:
++            return self.send_error(400, 'data parameter is required')
++        preset = (params.get('preset', ['instagramGlow'])[0] or 'instagramGlow').strip()
++        try:
++            size = max(64, min(4000, int(params.get('size', ['1200'])[0])))
++        except (TypeError, ValueError):
++            size = 1200
++        # Optional color overrides
++        kwargs = {}
++        for key in ('gradient_top', 'gradient_mid', 'gradient_bottom', 'background'):
++            val = (params.get(key, [''])[0] or '').strip()
++            if val:
++                # Tolerate URL-encoded '#'; accept bare 6-digit hex too
++                if not val.startswith('#'):
++                    val = '#' + val
++                kwargs[key] = val
++        icon = (params.get('icon', [''])[0] or '').strip().lower()
++        if icon in {'facebook', 'instagram', 'tiktok'}:
++            kwargs['center_icon'] = icon
++        try:
++            svg = qr_style.build_svg(data, size=size, preset=preset, **kwargs)
++        except Exception as e:
++            return self.send_error(500, f'QR generation failed: {e}')
++        return svg_response(self, svg)
++
++    def handle_qr_svg_for_slug(self, slug, parsed):
++        """/qr/<slug>.svg — encodes the public scan URL, uses preset from DB."""
++        conn = db()
++        row = conn.execute(
++            'SELECT slug, qr_style_preset, center_icon FROM qr_codes WHERE slug = ?',
++            (slug,),
++        ).fetchone()
++        conn.close()
++        if not row:
++            return self.send_error(404)
++        params = parse_qs(parsed.query)
++        try:
++            size = max(64, min(4000, int(params.get('size', ['1200'])[0])))
++        except (TypeError, ValueError):
++            size = 1200
++        preset = (params.get('preset', [None])[0]
++                  or row['qr_style_preset']
++                  or 'instagramGlow')
++        # icon: query param overrides DB; explicit ?icon=none clears it
++        icon_override = (params.get('icon', [None])[0] or '').strip().lower()
++        if icon_override == 'none':
++            icon = None
++        elif icon_override in {'facebook', 'instagram', 'tiktok'}:
++            icon = icon_override
++        else:
++            stored = (row['center_icon'] or '').strip().lower()
++            icon = stored if stored in {'facebook', 'instagram', 'tiktok'} else None
++        scan_url = f'{BASE_URL}/c/{row["slug"]}'
++        try:
++            svg = qr_style.build_svg(scan_url, size=size, preset=preset, center_icon=icon)
++        except Exception as e:
++            return self.send_error(500, f'QR generation failed: {e}')
++        return svg_response(self, svg)
++
+     def handle_admin_settings(self, slug):
+         if not self.require_admin():
+             return
+@@ -410,18 +500,20 @@ class Handler(BaseHTTPRequestHandler):
+         review_embed_url = (body.get('googleReviews', {}).get('embedUrl') or '').strip()
+         review_button_label = (body.get('googleReviews', {}).get('buttonLabel') or 'Recenzii Google').strip()
+         qr_style_preset = (body.get('qrStylePreset') or 'aurora').strip() or 'aurora'
++        center_icon_raw = (body.get('centerIcon') or '').strip().lower()
++        center_icon = center_icon_raw if center_icon_raw in {'facebook', 'instagram', 'tiktok'} else None
+         product_templates = body.get('productTemplates') if isinstance(body.get('productTemplates'), dict) else {}
+         product_templates_json = json.dumps(product_templates)
+         title = (body.get('title') or '').strip()
+         if title:
+             conn.execute(
+-                'UPDATE qr_codes SET title = ?, reviews_enabled = ?, review_embed_url = ?, review_button_label = ?, qr_style_preset = ?, product_templates_json = ?, updated_at = CURRENT_TIMESTAMP WHERE slug = ?',
+-                (title, reviews_enabled, review_embed_url, review_button_label, qr_style_preset, product_templates_json, slug),
++                'UPDATE qr_codes SET title = ?, reviews_enabled = ?, review_embed_url = ?, review_button_label = ?, qr_style_preset = ?, center_icon = ?, product_templates_json = ?, updated_at = CURRENT_TIMESTAMP WHERE slug = ?',
++                (title, reviews_enabled, review_embed_url, review_button_label, qr_style_preset, center_icon, product_templates_json, slug),
+             )
+         else:
+             conn.execute(
+-                'UPDATE qr_codes SET reviews_enabled = ?, review_embed_url = ?, review_button_label = ?, qr_style_preset = ?, product_templates_json = ?, updated_at = CURRENT_TIMESTAMP WHERE slug = ?',
+-                (reviews_enabled, review_embed_url, review_button_label, qr_style_preset, product_templates_json, slug),
++                'UPDATE qr_codes SET reviews_enabled = ?, review_embed_url = ?, review_button_label = ?, qr_style_preset = ?, center_icon = ?, product_templates_json = ?, updated_at = CURRENT_TIMESTAMP WHERE slug = ?',
++                (reviews_enabled, review_embed_url, review_button_label, qr_style_preset, center_icon, product_templates_json, slug),
+             )
+         conn.commit()
+         conn.close()
