@@ -24,22 +24,28 @@ if os.path.isdir(os.path.join(_VENDOR, 'segno')) and _VENDOR not in sys.path:
 # Named presets. Keep the keys in sync with the frontend `qrStylePresets`.
 PRESETS = {
     'instagramGlow': {
-        'gradient_top': '#8B5CF6',     # violet
-        'gradient_mid': '#EC4899',     # pink
-        'gradient_bottom': '#F97316',  # orange
-        'background': '#0a0a0a',       # near-black, matches reference
-        'finder_corner_radius_modules': 1.8,  # how rounded the outer finder ring is
-        'finder_center_radius_modules': 0.9,  # how rounded the inner finder square is
-        'dot_radius_factor': 0.5,             # 0..0.5; 0.5 = circles fill their cell
+        # Colors sampled from the reference t-shirt: vivid purple top, magenta
+        # mid, orange bottom — exact vertical gradient like the printed design.
+        'gradient_top': '#A011DB',     # vivid purple (top of reference)
+        'gradient_mid': '#C026D3',     # magenta transition (mid)
+        'gradient_bottom': '#F97316',  # saturated orange (bottom of reference)
+        'background': '#0a0a0a',       # near-black, matches t-shirt fabric
+        # Reference finders look like ROUNDED SQUARES, not full circles.
+        # 7-module outer ring with ~1.5-module radius reads as the iconic
+        # "rounded square O", and the 3-module center with ~0.8-module
+        # radius reads as a soft inner pellet.
+        'finder_corner_radius_modules': 1.5,
+        'finder_center_radius_modules': 0.8,
+        'module_fill_factor': 0.85,    # ~15% gap so each module reads as a discrete pixel
     },
     'instagramGlowLight': {
         'gradient_top': '#7C3AED',
         'gradient_mid': '#DB2777',
         'gradient_bottom': '#EA580C',
         'background': '#FFFFFF',
-        'finder_corner_radius_modules': 1.8,
-        'finder_center_radius_modules': 0.9,
-        'dot_radius_factor': 0.5,
+        'finder_corner_radius_modules': 1.5,
+        'finder_center_radius_modules': 0.8,
+        'module_fill_factor': 0.85,
     },
 }
 
