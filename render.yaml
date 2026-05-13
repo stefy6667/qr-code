@@ -3,7 +3,7 @@ services:
     name: qr-studio
     env: python
     plan: starter
-    buildCommand: chmod +x server.py
+    buildCommand: pip install -r requirements.txt && chmod +x server.py
     startCommand: python3 server.py
     disk:
       name: qr-studio-data

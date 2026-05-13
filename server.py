@@ -14,6 +14,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 
+import qr_style
+
 ROOT = Path(__file__).resolve().parent
 DATA_ROOT = Path(os.environ.get('DATA_ROOT', str(ROOT / 'data'))).resolve()
 UPLOAD_DIR = Path(os.environ.get('UPLOAD_DIR', str(DATA_ROOT / 'uploads'))).resolve()
@@ -126,6 +128,20 @@ def xml_response(handler, xml: str, status=200):
     handler.wfile.write(data)
 
 
+def svg_response(handler, svg: str, status=200, cacheable: bool = True):
+    data = svg.encode('utf-8')
+    handler.send_response(status)
+    handler.send_header('Content-Type', 'image/svg+xml; charset=utf-8')
+    handler.send_header('Content-Length', str(len(data)))
+    # The QR design is deterministic per (data, preset, size, colors).
+    # Browsers can cache it; we send no-store for safety on the per-slug
+    # endpoint since BASE_URL changes would change the encoded payload.
+    handler.send_header('Cache-Control', 'public, max-age=3600' if cacheable else 'no-store')
+    handler.send_header('Access-Control-Allow-Origin', '*')
+    handler.end_headers()
+    handler.wfile.write(data)
+
+
 def parse_body(handler):
     length = int(handler.headers.get('Content-Length', '0'))
     raw = handler.rfile.read(length) if length else b'{}'
@@ -204,6 +220,11 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith('/api/public/qr/'):
             slug = path.split('/')[-1]
             return self.handle_public_qr(slug)
+        if path == '/qr.svg':
+            return self.handle_qr_svg_raw(parsed)
+        if path.startswith('/qr/') and path.endswith('.svg'):
+            slug = path[len('/qr/'):-len('.svg')]
+            return self.handle_qr_svg_for_slug(slug, parsed)
         if path == '/':
             return self.serve_file(PUBLIC_DIR / 'index.html', content_type='text/html; charset=utf-8')
         if path == '/admin' or path.startswith('/admin/'):
@@ -396,6 +417,60 @@ class Handler(BaseHTTPRequestHandler):
             '</Response>'
         )
         return xml_response(self, twiml)
+
+    def handle_qr_svg_raw(self, parsed):
+        """Generic SVG generator: /qr.svg?data=...&preset=...&size=...
+
+        Used for previews / arbitrary URLs (e.g. before a code is saved).
+        """
+        params = parse_qs(parsed.query)
+        data = (params.get('data', [''])[0] or '').strip()
+        if not data:
+            return self.send_error(400, 'data parameter is required')
+        preset = (params.get('preset', ['instagramGlow'])[0] or 'instagramGlow').strip()
+        try:
+            size = max(64, min(4000, int(params.get('size', ['1200'])[0])))
+        except (TypeError, ValueError):
+            size = 1200
+        # Optional color overrides
+        kwargs = {}
+        for key in ('gradient_top', 'gradient_mid', 'gradient_bottom', 'background'):
+            val = (params.get(key, [''])[0] or '').strip()
+            if val:
+                # Tolerate URL-encoded '#'; accept bare 6-digit hex too
+                if not val.startswith('#'):
+                    val = '#' + val
+                kwargs[key] = val
+        try:
+            svg = qr_style.build_svg(data, size=size, preset=preset, **kwargs)
+        except Exception as e:
+            return self.send_error(500, f'QR generation failed: {e}')
+        return svg_response(self, svg)
+
+    def handle_qr_svg_for_slug(self, slug, parsed):
+        """/qr/<slug>.svg — encodes the public scan URL, uses preset from DB."""
+        conn = db()
+        row = conn.execute(
+            'SELECT slug, qr_style_preset FROM qr_codes WHERE slug = ?',
+            (slug,),
+        ).fetchone()
+        conn.close()
+        if not row:
+            return self.send_error(404)
+        params = parse_qs(parsed.query)
+        try:
+            size = max(64, min(4000, int(params.get('size', ['1200'])[0])))
+        except (TypeError, ValueError):
+            size = 1200
+        preset = (params.get('preset', [None])[0]
+                  or row['qr_style_preset']
+                  or 'instagramGlow')
+        scan_url = f'{BASE_URL}/c/{row["slug"]}'
+        try:
+            svg = qr_style.build_svg(scan_url, size=size, preset=preset)
+        except Exception as e:
+            return self.send_error(500, f'QR generation failed: {e}')
+        return svg_response(self, svg)
 
     def handle_admin_settings(self, slug):
         if not self.require_admin():
