@@ -279,25 +279,49 @@ def build_svg(
         f'<stop offset="100%" stop-color="{cfg["gradient_bottom"]}"/>',
         '</linearGradient>',
         '</defs>',
-        f'<rect width="{size}" height="{size}" fill="{cfg["background"]}"/>',
     ]
+    if cfg.get('background'):
+        parts.append(f'<rect width="{size}" height="{size}" fill="{cfg["background"]}"/>')
 
-    # data modules
-    r_dot = module_size * cfg['dot_radius_factor']
+    # data modules — sharp pixel squares as in the reference t-shirt design.
+    # A tiny gap (`module_fill_factor` < 1) keeps modules visually discrete
+    # so the QR reads as a grid of pixels rather than a continuous blob.
+    legacy_dot = cfg.get('dot_radius_factor')  # back-compat for old "dots" presets
+    fill_factor = cfg.get('module_fill_factor', 0.92)
+    mod_size = module_size * fill_factor
+    mod_offset = (module_size - mod_size) / 2
     parts.append('<g fill="url(#qrGrad)">')
     for r, row in enumerate(matrix):
         for c, val in enumerate(row):
             if not val or in_finder(r, c) or in_icon(r, c):
                 continue
-            cx = (c + quiet + 0.5) * module_size
-            cy = (r + quiet + 0.5) * module_size
-            parts.append(f'<circle cx="{cx:.2f}" cy="{cy:.2f}" r="{r_dot:.2f}"/>')
+            if legacy_dot is not None:
+                cx_d = (c + quiet + 0.5) * module_size
+                cy_d = (r + quiet + 0.5) * module_size
+                parts.append(
+                    f'<circle cx="{cx_d:.2f}" cy="{cy_d:.2f}" '
+                    f'r="{module_size * legacy_dot:.2f}"/>'
+                )
+                continue
+            x = (c + quiet) * module_size + mod_offset
+            y = (r + quiet) * module_size + mod_offset
+            parts.append(
+                f'<rect x="{x:.2f}" y="{y:.2f}" '
+                f'width="{mod_size:.2f}" height="{mod_size:.2f}"/>'
+            )
     parts.append('</g>')
 
-    # finder patterns: rounded-square ring + inner rounded-square dot
-    outer_r = module_size * cfg['finder_corner_radius_modules']
-    inner_r = module_size * cfg['finder_corner_radius_modules'] * 0.72
-    center_r = module_size * cfg['finder_center_radius_modules']
+    # finder patterns: outer ring (rounded square / circle) + inner center
+    # dot. With finder_corner_radius_modules = 3.5 the outer ring is a true
+    # circle. We compute the inner cutout radius so the ring keeps a
+    # consistent stroke thickness even when fully circular.
+    outer_r = min(module_size * cfg['finder_corner_radius_modules'],
+                  3.5 * module_size)
+    inner_r = min(outer_r - module_size, 2.5 * module_size)
+    if inner_r < 0:
+        inner_r = 0
+    center_r = min(module_size * cfg['finder_center_radius_modules'],
+                   1.5 * module_size)
     parts.append('<g fill="url(#qrGrad)" fill-rule="evenodd">')
     for fr, fc in finder_positions:
         x = (fc + quiet) * module_size
