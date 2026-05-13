@@ -1,0 +1,7 @@
+# Runtime / local data
+data/
+__pycache__/
+*.pyc
+
+# Generated artifact bundles (do not commit binaries)
+artifacts/*.zip
