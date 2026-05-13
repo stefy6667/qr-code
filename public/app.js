@@ -70,6 +70,16 @@ const qrStylePresets = {
       colorStops: [[0, '#9333ea'], [0.5, '#ec4899'], [1, '#f59e0b']]
     },
     background: '#151515'
+  },
+  neonSocial: {
+    label: 'Neon Social',
+    radius: 0.42,
+    fill: {
+      type: 'linear-gradient',
+      position: [0, 0, 0, 1],
+      colorStops: [[0, '#8b1cf6'], [0.52, '#d946ef'], [1, '#f97316']]
+    },
+    background: '#101010'
   }
 };
 

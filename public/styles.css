@@ -193,7 +193,8 @@ button.danger { background: linear-gradient(135deg, var(--danger), #be123c); }
 }
 .qr-preview-card.ember,
 .qr-preview-card.sunset,
-.qr-preview-card.frost {
+.qr-preview-card.frost,
+.qr-preview-card.neonSocial {
   background: #171717;
 }
 .qr-preview-card.ocean,
