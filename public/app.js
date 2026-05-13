@@ -472,6 +472,113 @@ function loadImage(src) {
   });
 }
 
+function _roundedRectPath(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+// Draws the center brand icon directly on a canvas. Used as an overlay for
+// presets that render via QrCreator (no server-side SVG icon injection).
+// Mirrors the SVG rendering in `qr_style.py` so both engines produce the
+// same visual.
+function drawCenterIcon(canvas, iconKey) {
+  if (!canvas || !iconKey || !['facebook', 'instagram', 'tiktok'].includes(iconKey)) return;
+  const ctx = canvas.getContext('2d');
+  const size = canvas.width;
+  // Visual icon = ~22% * 0.88 of the QR width, matching the server-side value
+  const iconSize = size * 0.22 * 0.88;
+  const cx = size / 2;
+  const cy = size / 2;
+  const haloR = iconSize * 0.20;
+
+  // White halo (visually separates icon from QR modules)
+  _roundedRectPath(ctx, cx - iconSize / 2, cy - iconSize / 2, iconSize, iconSize, haloR);
+  ctx.fillStyle = '#ffffff';
+  ctx.fill();
+
+  const pad = iconSize * 0.10;
+  const inner = iconSize - pad * 2;
+  const ix = cx - inner / 2;
+  const iy = cy - inner / 2;
+  const innerR = inner * 0.20;
+
+  if (iconKey === 'facebook') {
+    _roundedRectPath(ctx, ix, iy, inner, inner, innerR);
+    ctx.fillStyle = '#1877F2';
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `900 ${Math.round(inner * 0.78)}px "Helvetica Neue", Helvetica, Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    // tiny vertical nudge — typographic "f" centers slightly below geometric center
+    ctx.fillText('f', cx, cy + inner * 0.04);
+  } else if (iconKey === 'instagram') {
+    const grad = ctx.createLinearGradient(ix, iy + inner, ix + inner, iy);
+    grad.addColorStop(0, '#FCAF45');
+    grad.addColorStop(0.5, '#E1306C');
+    grad.addColorStop(1, '#5B51D8');
+    _roundedRectPath(ctx, ix, iy, inner, inner, innerR);
+    ctx.fillStyle = grad;
+    ctx.fill();
+    const stroke = inner * 0.08;
+    const camPad = inner * 0.20;
+    const camS = inner - 2 * camPad;
+    const camR = camS * 0.24;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = stroke;
+    _roundedRectPath(ctx, ix + camPad, iy + camPad, camS, camS, camR);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(cx, cy, camS * 0.22, 0, Math.PI * 2);
+    ctx.stroke();
+    const dotR = camS * 0.06;
+    const dotOff = camS * 0.18;
+    ctx.beginPath();
+    ctx.arc(ix + camPad + camS - dotOff, iy + camPad + dotOff, dotR, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+  } else if (iconKey === 'tiktok') {
+    _roundedRectPath(ctx, ix, iy, inner, inner, innerR);
+    ctx.fillStyle = '#000000';
+    ctx.fill();
+    const s = inner;
+    const stemW = s * 0.13;
+    const stemX = ix + s * 0.55;
+    const stemTop = iy + s * 0.18;
+    const stemBot = iy + s * 0.68;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(stemX, stemTop, stemW, stemBot - stemTop);
+    const hookW = s * 0.18;
+    const hookH = s * 0.13;
+    ctx.fillRect(stemX, stemTop, hookW, hookH);
+    const bubbleR = s * 0.14;
+    const bubbleCx = stemX - s * 0.08;
+    const bubbleCy = stemBot + s * 0.02;
+    ctx.beginPath();
+    ctx.arc(bubbleCx, bubbleCy, bubbleR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = '#25F4EE';
+    ctx.beginPath();
+    ctx.arc(bubbleCx - s * 0.04, bubbleCy + s * 0.02, bubbleR * 0.55, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#FE2C55';
+    ctx.beginPath();
+    ctx.arc(bubbleCx + s * 0.04, bubbleCy - s * 0.02, bubbleR * 0.55, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+}
+
 async function renderPrettyQr(canvas, text, styleKey, size = 240, icon = null) {
   if (!canvas) return false;
   const preset = getQrPreset(styleKey);
@@ -483,6 +590,7 @@ async function renderPrettyQr(canvas, text, styleKey, size = 240, icon = null) {
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, size, size);
       ctx.drawImage(img, 0, 0, size, size);
+      // icon is already baked into the SVG for this engine
       return true;
     } catch (error) {
       console.error('renderPrettyQr server-svg failed', error);
@@ -491,6 +599,8 @@ async function renderPrettyQr(canvas, text, styleKey, size = 240, icon = null) {
   }
   if (!window.QrCreator) return false;
   window.QrCreator.render(buildQrRenderConfig(text, styleKey, size), canvas);
+  // Overlay icon on top — works for all client-rendered presets
+  if (icon) drawCenterIcon(canvas, icon);
   return true;
 }
 
