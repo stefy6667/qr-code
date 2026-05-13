@@ -29,8 +29,8 @@ PRESETS = {
         'gradient_bottom': '#F97316',  # orange
         'background': '#0a0a0a',       # near-black, matches reference
         'finder_corner_radius_modules': 1.8,  # how rounded the outer finder ring is
-        'finder_center_radius_modules': 0.9,  # how rounded the inner finder square is
-        'dot_radius_factor': 0.5,             # 0..0.5; 0.5 = circles fill their cell
+        'finder_center_radius_modules': 0,  # how rounded the inner finder square is
+        'dot_radius_factor': 0,             # 0..0.5; 0.5 = circles fill their cell
     },
     'instagramGlowLight': {
         'gradient_top': '#7C3AED',
@@ -38,8 +38,8 @@ PRESETS = {
         'gradient_bottom': '#EA580C',
         'background': '#FFFFFF',
         'finder_corner_radius_modules': 1.8,
-        'finder_center_radius_modules': 0.9,
-        'dot_radius_factor': 0.5,
+        'finder_center_radius_modules': 0,
+        'dot_radius_factor': 0,
     },
 }
 
