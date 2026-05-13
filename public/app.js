@@ -72,8 +72,8 @@ const qrStylePresets = {
     background: '#151515'
   },
   neonSocial: {
-    label: 'Neon Social',
-    radius: 0.42,
+    label: 'Neon Social Rounded',
+    radius: 0.5,
     fill: {
       type: 'linear-gradient',
       position: [0, 0, 0, 1],
