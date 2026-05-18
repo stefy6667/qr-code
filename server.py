@@ -15,6 +15,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 
 import qr_style
+import postcard
 
 ROOT = Path(__file__).resolve().parent
 DATA_ROOT = Path(os.environ.get('DATA_ROOT', str(ROOT / 'data'))).resolve()
@@ -227,6 +228,9 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith('/qr/') and path.endswith('.svg'):
             slug = path[len('/qr/'):-len('.svg')]
             return self.handle_qr_svg_for_slug(slug, parsed)
+        if path.startswith('/admin/postcard/'):
+            slug = path[len('/admin/postcard/'):]
+            return self.handle_postcard(slug, parsed)
         if path == '/':
             return self.serve_file(PUBLIC_DIR / 'index.html', content_type='text/html; charset=utf-8')
         if path == '/admin' or path.startswith('/admin/'):
@@ -452,6 +456,60 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:
             return self.send_error(500, f'QR generation failed: {e}')
         return svg_response(self, svg)
+
+    def handle_postcard(self, slug, parsed):
+        """/admin/postcard/<slug>?garment=tshirt|hoodie&lang=ro|en
+
+        Returns a composite SVG postcard with the scan QR baked onto the
+        garment illustration plus a small re-edit QR and the edit code.
+        Admin-only (the edit code is sensitive)."""
+        if not self.require_admin():
+            return
+        params = parse_qs(parsed.query)
+        garment = (params.get('garment', ['tshirt'])[0] or 'tshirt').lower()
+        if garment not in ('tshirt', 'hoodie'):
+            garment = 'tshirt'
+        lang = (params.get('lang', ['ro'])[0] or 'ro').lower()
+        if lang not in ('ro', 'en'):
+            lang = 'ro'
+        conn = db()
+        row = conn.execute(
+            'SELECT slug, edit_code, qr_style_preset, center_icon FROM qr_codes WHERE slug = ?',
+            (slug,),
+        ).fetchone()
+        conn.close()
+        if not row:
+            return self.send_error(404)
+        scan_url = f'{BASE_URL}/c/{row["slug"]}'
+        edit_url = f'{BASE_URL}/edit?code={row["edit_code"]}'
+        # Short domain for the "or access directly" pill — derived from BASE_URL
+        short_domain = urlparse(BASE_URL).netloc or BASE_URL
+        center_icon = (row['center_icon'] or '').strip().lower()
+        if center_icon not in {'facebook', 'instagram', 'tiktok'}:
+            center_icon = None
+        try:
+            svg = postcard.build_postcard_svg(
+                scan_url=scan_url,
+                edit_url=edit_url,
+                edit_code=row['edit_code'],
+                short_domain=short_domain,
+                garment=garment,
+                lang=lang,
+                qr_preset=row['qr_style_preset'] or 'instagramGlow',
+                qr_center_icon=center_icon,
+            )
+        except Exception as e:
+            return self.send_error(500, f'Postcard generation failed: {e}')
+        # Inline SVG download — filename hint via Content-Disposition.
+        data = svg.encode('utf-8')
+        self.send_response(200)
+        self.send_header('Content-Type', 'image/svg+xml; charset=utf-8')
+        self.send_header('Content-Length', str(len(data)))
+        filename = f'postcard-{garment}-{lang}-{slug}.svg'
+        self.send_header('Content-Disposition', f'inline; filename="{filename}"')
+        self.send_header('Cache-Control', 'no-store')
+        self.end_headers()
+        self.wfile.write(data)
 
     def handle_qr_svg_for_slug(self, slug, parsed):
         """/qr/<slug>.svg — encodes the public scan URL, uses preset from DB."""
