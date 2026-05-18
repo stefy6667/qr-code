@@ -458,7 +458,7 @@ class Handler(BaseHTTPRequestHandler):
         return svg_response(self, svg)
 
     def handle_postcard(self, slug, parsed):
-        """/admin/postcard/<slug>?garment=tshirt|hoodie&lang=ro|en
+        """/admin/postcard/<slug>?garment=tshirt|hoodie
 
         Returns a composite SVG postcard with the scan QR baked onto the
         garment illustration plus a small re-edit QR and the edit code.
@@ -469,9 +469,6 @@ class Handler(BaseHTTPRequestHandler):
         garment = (params.get('garment', ['tshirt'])[0] or 'tshirt').lower()
         if garment not in ('tshirt', 'hoodie'):
             garment = 'tshirt'
-        lang = (params.get('lang', ['ro'])[0] or 'ro').lower()
-        if lang not in ('ro', 'en'):
-            lang = 'ro'
         conn = db()
         row = conn.execute(
             'SELECT slug, edit_code, qr_style_preset, center_icon FROM qr_codes WHERE slug = ?',
@@ -482,7 +479,6 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_error(404)
         scan_url = f'{BASE_URL}/c/{row["slug"]}'
         edit_url = f'{BASE_URL}/edit?code={row["edit_code"]}'
-        # Short domain for the "or access directly" pill — derived from BASE_URL
         short_domain = urlparse(BASE_URL).netloc or BASE_URL
         center_icon = (row['center_icon'] or '').strip().lower()
         if center_icon not in {'facebook', 'instagram', 'tiktok'}:
@@ -494,7 +490,6 @@ class Handler(BaseHTTPRequestHandler):
                 edit_code=row['edit_code'],
                 short_domain=short_domain,
                 garment=garment,
-                lang=lang,
                 qr_preset=row['qr_style_preset'] or 'instagramGlow',
                 qr_center_icon=center_icon,
             )
@@ -505,7 +500,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header('Content-Type', 'image/svg+xml; charset=utf-8')
         self.send_header('Content-Length', str(len(data)))
-        filename = f'postcard-{garment}-{lang}-{slug}.svg'
+        filename = f'postcard-{garment}-{slug}.svg'
         self.send_header('Content-Disposition', f'inline; filename="{filename}"')
         self.send_header('Cache-Control', 'no-store')
         self.end_headers()
