@@ -814,6 +814,76 @@ function loadImage(url) {
   });
 }
 
+async function downloadPostcardPng(slug, garment) {
+  // A4 landscape at 300 DPI = 3508 x 2480 px. The SVG template is 1536x1024
+  // (3:2 ratio), so when we fit it to the A4 width (3508) it ends up
+  // 3508x2338, leaving a ~71px white margin top and bottom — perfect for
+  // printing without cropping any content.
+  const A4_W = 3508;
+  const A4_H = 2480;
+  const TEMPLATE_RATIO = 1536 / 1024;
+
+  // Fetch the postcard SVG from the server.
+  const response = await fetch(
+    `/admin/postcard/${encodeURIComponent(slug)}?garment=${encodeURIComponent(garment)}`,
+    { credentials: 'same-origin' }
+  );
+  if (!response.ok) {
+    throw new Error(`Server returned ${response.status}`);
+  }
+  const svgText = await response.text();
+
+  // Wrap SVG in a Blob URL so <img> can load it. Using a Blob instead of a
+  // data URI avoids size limits and CORS-tainted-canvas issues.
+  const blob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
+  const blobUrl = URL.createObjectURL(blob);
+
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error('SVG failed to load'));
+      i.src = blobUrl;
+    });
+
+    // Build A4 canvas with white background.
+    const canvas = document.createElement('canvas');
+    canvas.width = A4_W;
+    canvas.height = A4_H;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, A4_W, A4_H);
+
+    // Fit template to A4 width, center vertically.
+    const drawW = A4_W;
+    const drawH = Math.round(drawW / TEMPLATE_RATIO);
+    const drawX = 0;
+    const drawY = Math.round((A4_H - drawH) / 2);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, drawX, drawY, drawW, drawH);
+
+    // Export as PNG via a download link.
+    canvas.toBlob((pngBlob) => {
+      if (!pngBlob) {
+        throw new Error('PNG export failed');
+      }
+      const pngUrl = URL.createObjectURL(pngBlob);
+      const a = document.createElement('a');
+      a.href = pngUrl;
+      a.download = `postcard-${garment}-${slug}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      // Free the PNG blob URL after the download triggers.
+      setTimeout(() => URL.revokeObjectURL(pngUrl), 2000);
+    }, 'image/png');
+  } finally {
+    URL.revokeObjectURL(blobUrl);
+  }
+}
+
+
 async function downloadGarmentMockup(url, styleKey, name, garment, color, templateImage, icon = null) {
   const canvas = document.createElement('canvas');
   canvas.width = 1800;
@@ -1000,21 +1070,21 @@ function renderAdminQrCodes() {
     };
   });
   document.querySelectorAll('.postcard-btn').forEach((button) => {
-    button.onclick = () => {
+    button.onclick = async () => {
       const slug = button.dataset.slug;
       const garment = button.dataset.garment || 'tshirt';
-      // Trigger a download by clicking an anchor with the postcard URL.
-      // The server returns an SVG with a Content-Disposition filename hint,
-      // and the `download` attribute on the link makes the browser save it
-      // rather than navigate. SVG opens cleanly in any browser/viewer and
-      // can be exported to PNG/PDF from there for printing.
-      const a = document.createElement('a');
-      a.href = `/admin/postcard/${encodeURIComponent(slug)}?garment=${garment}`;
-      a.download = `postcard-${garment}-${slug}.svg`;
-      a.target = '_blank';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      const originalLabel = button.textContent;
+      button.textContent = 'Generez...';
+      button.disabled = true;
+      try {
+        await downloadPostcardPng(slug, garment);
+      } catch (error) {
+        console.error('postcard download failed', error);
+        alert('Nu am putut genera postcard-ul. Încearcă din nou.');
+      } finally {
+        button.textContent = originalLabel;
+        button.disabled = false;
+      }
     };
   });
   document.querySelectorAll('.garment-mockup-btn').forEach((button) => {
