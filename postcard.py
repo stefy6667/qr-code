@@ -126,16 +126,15 @@ def build_postcard_svg(
     ]
 
     # Main scan QR on the garment, centered in placeholder.
+    # Uses a plain black-and-white QR (not the styled gradient one) — the
+    # postcard is a print template, so a clean B/W QR matches the rest of
+    # the design and prints cleanly on garments.
     x1, y1, x2, y2 = coords['qr_main']
     qw, qh = x2 - x1, y2 - y1
     s = min(qw, qh)
-    scale = s / 1200
     qx = x1 + (qw - s) / 2
     qy = y1 + (qh - s) / 2
-    qr_inner = _styled_qr_inner(scan_url, preset=qr_preset, center_icon=qr_center_icon)
-    parts.append(
-        f'<g transform="translate({qx:.1f},{qy:.1f}) scale({scale:.4f})">{qr_inner}</g>'
-    )
+    parts.append(_plain_qr_svg(scan_url, qx, qy, s))
 
     # Small edit QR, centered in its placeholder.
     ex1, ey1, ex2, ey2 = coords['qr_edit']
