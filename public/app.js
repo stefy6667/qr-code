@@ -92,6 +92,12 @@ const qrStylePresets = {
     engine: 'server-svg',
     serverPreset: 'instagramGlowLight',
     background: '#ffffff'
+  },
+  whiteOnBlack: {
+    label: 'Alb pe negru (clasic)',
+    engine: 'server-svg',
+    serverPreset: 'whiteOnBlack',
+    background: '#000000'
   }
 };
 
