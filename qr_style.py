@@ -34,18 +34,31 @@ PRESETS = {
         # 7-module outer ring with ~1.5-module radius reads as the iconic
         # "rounded square O", and the 3-module center with ~0.8-module
         # radius reads as a soft inner pellet.
-        'finder_corner_radius_modules': 2.5,
-        'finder_center_radius_modules': 1.2,
-        'module_fill_factor': 0.85,    # ~15% gap so each module reads as a discrete pixel
+        'finder_corner_radius_modules': 3.0,
+        'finder_center_radius_modules': 1.5,
+        'module_fill_factor': 1.0,    # connected modules TOUCH (no gap) — pixel-art blocks
     },
     'instagramGlowLight': {
         'gradient_top': '#7C3AED',
         'gradient_mid': '#DB2777',
         'gradient_bottom': '#EA580C',
         'background': '#FFFFFF',
-        'finder_corner_radius_modules': 2.5,
-        'finder_center_radius_modules': 1.2,
+        'finder_corner_radius_modules': 3.0,
+        'finder_center_radius_modules': 1.5,
         'module_fill_factor': 0.85,
+    },
+    'whiteOnBlack': {
+        # Classic inverted look: white pixels on black background. Uses solid
+        # white (no gradient) by setting all three gradient stops to white.
+        # Square finders + touching modules give it a crisp, classic QR feel.
+        'gradient_top': '#FFFFFF',
+        'gradient_mid': '#FFFFFF',
+        'gradient_bottom': '#FFFFFF',
+        'background': '#000000',
+        'finder_corner_radius_modules': 0.0,  # sharp square finder corners
+        'finder_center_radius_modules': 0.0,
+        'module_fill_factor': 1.0,
+        'classic_pixels': True,  # isolated modules stay as squares, no circles
     },
 }
 
@@ -231,7 +244,14 @@ def build_svg(
 
     icon_key = center_icon if center_icon in SUPPORTED_ICONS else None
 
-    qr = segno.make(data, error='h', boost_error=False)
+    # Auto-pick error correction so the QR has as few modules as possible
+    # while still being scannable:
+    #   - no icon → EC level L (~7% recovery) → fewer modules, cleaner look
+    #   - with icon → EC level Q (~25% recovery) → enough redundancy so the
+    #     center-icon blanking doesn't break the code
+    ec_level = 'q' if icon_key else 'l'
+
+    qr = segno.make(data, error=ec_level, boost_error=False)
     matrix = qr.matrix
     n = len(matrix)
     quiet = 4
@@ -253,7 +273,8 @@ def build_svg(
     icon_modules = 0
     icon_size_px = 0.0
     if icon_key:
-        icon_modules = max(5, int(round(n * 0.22)))
+        # ~18% of QR width — well within EC-Q's ~25% recovery margin.
+        icon_modules = max(5, int(round(n * 0.18)))
         # Round up to odd so the icon centers on a module
         if icon_modules % 2 == 0:
             icon_modules += 1
@@ -291,13 +312,10 @@ def build_svg(
     if cfg.get('background'):
         parts.append(f'<rect width="{size}" height="{size}" fill="{cfg["background"]}"/>')
 
-    # data modules — drawn as continuous LINES (pill / stadium shapes).
-    # We greedily group consecutive dark modules in each row into a single
-    # horizontal run, and any dark module not consumed by a row run gets
-    # grouped vertically. Each run is rendered as one rounded-cap rectangle
-    # spanning its full length, so adjacent modules visually merge into a
-    # single flowing line with only the endpoints rounded — matching the
-    # reference t-shirt design's "lines, not dots" look.
+    # data modules — matches the reference t-shirt design:
+    #   - isolated modules (no 4-neighbor touching another module) → small CIRCLES
+    #   - connected modules → sharp pixel-art SQUARES that touch each other
+    #     (adjacent dark squares merge visually into blocks with crisp corners)
     legacy_dot = cfg.get('dot_radius_factor')  # back-compat for old "dots" presets
     parts.append('<g fill="url(#qrGrad)">')
 
@@ -314,81 +332,52 @@ def build_svg(
                     f'r="{module_size * legacy_dot:.2f}"/>'
                 )
     else:
-        # Track which cells have already been emitted (as part of a run).
-        consumed = [[False] * n for _ in range(n)]
-
         def is_data(rr: int, cc: int) -> bool:
-            """A dark module that we should render (not finder, not icon)."""
+            """Dark module that we should render (not finder, not icon, in-bounds)."""
+            if rr < 0 or rr >= n or cc < 0 or cc >= n:
+                return False
             return (
                 bool(matrix[rr][cc])
                 and not in_finder(rr, cc)
                 and not in_icon(rr, cc)
             )
 
-        # Pass 1 — horizontal runs of length >= 2
-        for r in range(n):
-            c = 0
-            while c < n:
-                if not is_data(r, c) or consumed[r][c]:
-                    c += 1
-                    continue
-                # find run length to the right
-                start = c
-                while c < n and is_data(r, c) and not consumed[r][c]:
-                    c += 1
-                length = c - start
-                if length >= 2:
-                    for cc in range(start, start + length):
-                        consumed[r][cc] = True
-                    x = (start + quiet) * module_size
-                    y = (r + quiet) * module_size
-                    w = length * module_size
-                    h = module_size
-                    radius = h / 2  # rounded caps
-                    parts.append(
-                        f'<rect x="{x:.2f}" y="{y:.2f}" '
-                        f'width="{w:.2f}" height="{h:.2f}" '
-                        f'rx="{radius:.2f}" ry="{radius:.2f}"/>'
-                    )
-
-        # Pass 2 — vertical runs of length >= 2 over what's left
-        for c in range(n):
-            r = 0
-            while r < n:
-                if not is_data(r, c) or consumed[r][c]:
-                    r += 1
-                    continue
-                start = r
-                while r < n and is_data(r, c) and not consumed[r][c]:
-                    r += 1
-                length = r - start
-                if length >= 2:
-                    for rr in range(start, start + length):
-                        consumed[rr][c] = True
-                    x = (c + quiet) * module_size
-                    y = (start + quiet) * module_size
-                    w = module_size
-                    h = length * module_size
-                    radius = w / 2
-                    parts.append(
-                        f'<rect x="{x:.2f}" y="{y:.2f}" '
-                        f'width="{w:.2f}" height="{h:.2f}" '
-                        f'rx="{radius:.2f}" ry="{radius:.2f}"/>'
-                    )
-
-        # Pass 3 — leftover isolated modules become circles (the "dot" caps
-        # at line endpoints / standalone pixels in the reference).
-        dot_r = module_size * 0.5
+        circle_r = module_size * 0.42  # isolated pixel circle radius
+        classic_pixels = bool(cfg.get('classic_pixels'))
         for r in range(n):
             for c in range(n):
-                if not is_data(r, c) or consumed[r][c]:
+                if not is_data(r, c):
                     continue
-                cx_d = (c + quiet + 0.5) * module_size
-                cy_d = (r + quiet + 0.5) * module_size
-                parts.append(
-                    f'<circle cx="{cx_d:.2f}" cy="{cy_d:.2f}" '
-                    f'r="{dot_r:.2f}"/>'
+                x = (c + quiet) * module_size
+                y = (r + quiet) * module_size
+                if classic_pixels:
+                    # Classic QR look: every module is a sharp square,
+                    # no circles even for isolated pixels.
+                    parts.append(
+                        f'<rect x="{x:.2f}" y="{y:.2f}" '
+                        f'width="{module_size:.2f}" height="{module_size:.2f}"/>'
+                    )
+                    continue
+                # 4-neighbor connectivity decides isolated vs connected
+                has_neighbor = (
+                    is_data(r - 1, c) or is_data(r + 1, c)
+                    or is_data(r, c - 1) or is_data(r, c + 1)
                 )
+                if has_neighbor:
+                    # full-cell sharp square — adjacent squares touch and
+                    # merge into pixel-art blocks
+                    parts.append(
+                        f'<rect x="{x:.2f}" y="{y:.2f}" '
+                        f'width="{module_size:.2f}" height="{module_size:.2f}"/>'
+                    )
+                else:
+                    # standalone module → small circle "dot"
+                    cx_d = x + module_size / 2
+                    cy_d = y + module_size / 2
+                    parts.append(
+                        f'<circle cx="{cx_d:.2f}" cy="{cy_d:.2f}" '
+                        f'r="{circle_r:.2f}"/>'
+                    )
 
     parts.append('</g>')
 
