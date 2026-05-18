@@ -237,10 +237,8 @@ async function renderAdmin() {
               </div>
               <div class="actions" style="margin-top:8px">
                 <span class="postcard-label">Postcard:</span>
-                <button type="button" class="postcard-btn" data-slug="${escapeAttribute(item.slug)}" data-garment="tshirt" data-lang="ro">Tricou RO</button>
-                <button type="button" class="postcard-btn" data-slug="${escapeAttribute(item.slug)}" data-garment="tshirt" data-lang="en">Tricou EN</button>
-                <button type="button" class="postcard-btn" data-slug="${escapeAttribute(item.slug)}" data-garment="hoodie" data-lang="ro">Hanorac RO</button>
-                <button type="button" class="postcard-btn" data-slug="${escapeAttribute(item.slug)}" data-garment="hoodie" data-lang="en">Hanorac EN</button>
+                <button type="button" class="postcard-btn" data-slug="${escapeAttribute(item.slug)}" data-garment="tshirt">Tricou</button>
+                <button type="button" class="postcard-btn" data-slug="${escapeAttribute(item.slug)}" data-garment="hoodie">Hanorac</button>
               </div>
             </div>
             <div>
@@ -1005,15 +1003,14 @@ function renderAdminQrCodes() {
     button.onclick = () => {
       const slug = button.dataset.slug;
       const garment = button.dataset.garment || 'tshirt';
-      const lang = button.dataset.lang || 'ro';
       // Trigger a download by clicking an anchor with the postcard URL.
       // The server returns an SVG with a Content-Disposition filename hint,
       // and the `download` attribute on the link makes the browser save it
       // rather than navigate. SVG opens cleanly in any browser/viewer and
       // can be exported to PNG/PDF from there for printing.
       const a = document.createElement('a');
-      a.href = `/admin/postcard/${encodeURIComponent(slug)}?garment=${garment}&lang=${lang}`;
-      a.download = `postcard-${garment}-${lang}-${slug}.svg`;
+      a.href = `/admin/postcard/${encodeURIComponent(slug)}?garment=${garment}`;
+      a.download = `postcard-${garment}-${slug}.svg`;
       a.target = '_blank';
       document.body.appendChild(a);
       a.click();
