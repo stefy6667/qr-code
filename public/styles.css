@@ -420,3 +420,30 @@ button.danger { background: linear-gradient(135deg, var(--danger), #be123c); }
   font-size: 12px;
 }
 .icon-swatch.icon-tt { background: #000; }
+
+.postcard-label {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  font-weight: 600;
+  margin-right: 4px;
+  align-self: center;
+}
+.postcard-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border: 1px solid rgba(168, 85, 247, 0.5);
+  border-radius: 999px;
+  background: rgba(168, 85, 247, 0.1);
+  color: #c4b5fd;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.postcard-btn:hover {
+  background: rgba(168, 85, 247, 0.25);
+  color: #ffffff;
+  border-color: rgba(168, 85, 247, 0.8);
+}

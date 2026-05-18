@@ -235,6 +235,13 @@ async function renderAdmin() {
                 <button type="button" class="secondary garment-mockup-btn" data-garment="hoodie" data-garment-color="white" data-template-image="${escapeAttribute(item.productTemplates?.hoodieWhite || '')}" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-icon="${escapeAttribute(item.centerIcon || '')}" data-qr-name="${escapeAttribute(item.slug)}">Hanorac alb</button>
                 <button type="button" class="secondary garment-mockup-btn" data-garment="hoodie" data-garment-color="black" data-template-image="${escapeAttribute(item.productTemplates?.hoodieBlack || '')}" data-qr-url="${escapeAttribute(item.scanUrl)}" data-qr-style="${escapeAttribute(item.qrStylePreset || 'aurora')}" data-qr-icon="${escapeAttribute(item.centerIcon || '')}" data-qr-name="${escapeAttribute(item.slug)}">Hanorac negru</button>
               </div>
+              <div class="actions" style="margin-top:8px">
+                <span class="postcard-label">Postcard:</span>
+                <button type="button" class="postcard-btn" data-slug="${escapeAttribute(item.slug)}" data-garment="tshirt" data-lang="ro">Tricou RO</button>
+                <button type="button" class="postcard-btn" data-slug="${escapeAttribute(item.slug)}" data-garment="tshirt" data-lang="en">Tricou EN</button>
+                <button type="button" class="postcard-btn" data-slug="${escapeAttribute(item.slug)}" data-garment="hoodie" data-lang="ro">Hanorac RO</button>
+                <button type="button" class="postcard-btn" data-slug="${escapeAttribute(item.slug)}" data-garment="hoodie" data-lang="en">Hanorac EN</button>
+              </div>
             </div>
             <div>
               <h3>${item.title}</h3>
@@ -992,6 +999,25 @@ function renderAdminQrCodes() {
       } catch (error) {
         alert('Nu am putut genera template-ul de print.');
       }
+    };
+  });
+  document.querySelectorAll('.postcard-btn').forEach((button) => {
+    button.onclick = () => {
+      const slug = button.dataset.slug;
+      const garment = button.dataset.garment || 'tshirt';
+      const lang = button.dataset.lang || 'ro';
+      // Trigger a download by clicking an anchor with the postcard URL.
+      // The server returns an SVG with a Content-Disposition filename hint,
+      // and the `download` attribute on the link makes the browser save it
+      // rather than navigate. SVG opens cleanly in any browser/viewer and
+      // can be exported to PNG/PDF from there for printing.
+      const a = document.createElement('a');
+      a.href = `/admin/postcard/${encodeURIComponent(slug)}?garment=${garment}&lang=${lang}`;
+      a.download = `postcard-${garment}-${lang}-${slug}.svg`;
+      a.target = '_blank';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     };
   });
   document.querySelectorAll('.garment-mockup-btn').forEach((button) => {
