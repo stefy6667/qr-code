@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 import base64
+import csv
 import hashlib
 import hmac
+import io
 import json
 import os
 import secrets
 import sqlite3
 import sys
+import zipfile
 from typing import Optional
 from http import HTTPStatus
 from http.cookies import SimpleCookie
@@ -84,6 +87,8 @@ def init_db():
         conn.execute("ALTER TABLE qr_codes ADD COLUMN dislike_count INTEGER NOT NULL DEFAULT 0")
     if 'center_icon' not in columns:
         conn.execute("ALTER TABLE qr_codes ADD COLUMN center_icon TEXT")
+    if 'batch_label' not in columns:
+        conn.execute("ALTER TABLE qr_codes ADD COLUMN batch_label TEXT")
     conn.commit()
     conn.close()
 
@@ -218,6 +223,10 @@ class Handler(BaseHTTPRequestHandler):
             return self.handle_session()
         if path == '/api/admin/qr-codes':
             return self.handle_admin_list()
+        if path == '/api/admin/export-csv':
+            return self.handle_export_csv(parsed)
+        if path == '/api/admin/export-dtf-zip':
+            return self.handle_export_dtf_zip(parsed)
         if path == '/api/public/top-voting':
             return self.handle_top_voting()
         if path.startswith('/api/public/qr/'):
@@ -279,6 +288,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.handle_logout()
         if path == '/api/admin/qr-codes':
             return self.handle_admin_create()
+        if path == '/api/admin/bulk-create':
+            return self.handle_bulk_create()
         if path == '/twilio/voice':
             return self.handle_twilio_voice()
         if path.startswith('/api/admin/qr/') and path.endswith('/settings'):
@@ -411,6 +422,149 @@ class Handler(BaseHTTPRequestHandler):
         conn.commit()
         conn.close()
         json_response(self, {'ok': True, 'slug': slug, 'editCode': edit_code})
+
+    def handle_bulk_create(self):
+        """Create N codes in one go, optionally tagged with a batch label.
+
+        Body: {"count": 100, "batchLabel": "Campanie Mai", "titlePrefix": "QR"}
+        Returns the list of created {slug, editCode}.
+        """
+        if not self.require_admin():
+            return
+        body = parse_body(self)
+        try:
+            count = int(body.get('count') or 0)
+        except (TypeError, ValueError):
+            count = 0
+        if count < 1 or count > 1000:
+            return json_response(self, {'ok': False, 'error': 'count must be between 1 and 1000'}, status=400)
+        batch_label = (body.get('batchLabel') or '').strip() or None
+        title_prefix = (body.get('titlePrefix') or 'Cod QR').strip() or 'Cod QR'
+
+        conn = db()
+        created = []
+        for i in range(count):
+            # Retry on the rare slug/edit_code collision.
+            for _attempt in range(5):
+                slug = random_slug()
+                edit_code = random_code()
+                try:
+                    conn.execute(
+                        'INSERT INTO qr_codes (slug, edit_code, title, batch_label) VALUES (?, ?, ?, ?)',
+                        (slug, edit_code, f'{title_prefix} {i + 1}', batch_label),
+                    )
+                    created.append({'slug': slug, 'editCode': edit_code})
+                    break
+                except sqlite3.IntegrityError:
+                    continue
+        conn.commit()
+        conn.close()
+        json_response(self, {'ok': True, 'created': len(created), 'batchLabel': batch_label, 'items': created})
+
+    def handle_export_csv(self, parsed):
+        """Download a CSV register of all codes (optionally filtered by batch).
+
+        Query: ?batch=<label>  (optional — omit for all codes)
+        """
+        if not self.require_admin():
+            return
+        params = parse_qs(parsed.query)
+        batch = (params.get('batch', [''])[0] or '').strip()
+        conn = db()
+        if batch:
+            rows = conn.execute(
+                'SELECT id, slug, edit_code, title, batch_label, created_at, scan_count '
+                'FROM qr_codes WHERE batch_label = ? ORDER BY id',
+                (batch,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                'SELECT id, slug, edit_code, title, batch_label, created_at, scan_count '
+                'FROM qr_codes ORDER BY id'
+            ).fetchall()
+        conn.close()
+
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow([
+            'nr', 'slug', 'scan_url', 'edit_code', 'edit_url',
+            'title', 'batch', 'created_at', 'scan_count',
+        ])
+        for idx, row in enumerate(rows, start=1):
+            scan_url = f'{BASE_URL}/c/{row["slug"]}'
+            edit_url = f'{BASE_URL}/edit?code={row["edit_code"]}'
+            writer.writerow([
+                idx, row['slug'], scan_url, row['edit_code'], edit_url,
+                row['title'], row['batch_label'] or '', row['created_at'],
+                row['scan_count'],
+            ])
+        data = buf.getvalue().encode('utf-8-sig')  # BOM so Excel shows diacritics
+
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/csv; charset=utf-8')
+        self.send_header('Content-Length', str(len(data)))
+        fname = f'qr-register{"-" + batch if batch else ""}.csv'
+        self.send_header('Content-Disposition', f'attachment; filename="{fname}"')
+        self.send_header('Cache-Control', 'no-store')
+        self.end_headers()
+        self.wfile.write(data)
+
+    def handle_export_dtf_zip(self, parsed):
+        """Download a ZIP of print-ready QR SVGs for a batch (or all).
+
+        Query:
+            ?batch=<label>     optional batch filter
+            ?preset=<preset>   QR style preset (default whiteOnBlack)
+            ?icon=<icon>       optional center icon for all
+        SVGs are vector — DTF printers scale them to any size/DPI cleanly.
+        Files are named NNN-<slug>.svg so they line up with the CSV register.
+        """
+        if not self.require_admin():
+            return
+        params = parse_qs(parsed.query)
+        batch = (params.get('batch', [''])[0] or '').strip()
+        preset = (params.get('preset', ['whiteOnBlack'])[0] or 'whiteOnBlack').strip()
+        icon = (params.get('icon', [''])[0] or '').strip().lower()
+        icon = icon if icon in {'facebook', 'instagram', 'tiktok'} else None
+
+        conn = db()
+        if batch:
+            rows = conn.execute(
+                'SELECT slug, qr_style_preset, center_icon FROM qr_codes WHERE batch_label = ? ORDER BY id',
+                (batch,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                'SELECT slug, qr_style_preset, center_icon FROM qr_codes ORDER BY id'
+            ).fetchall()
+        conn.close()
+
+        zip_buf = io.BytesIO()
+        with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for idx, row in enumerate(rows, start=1):
+                scan_url = f'{BASE_URL}/c/{row["slug"]}'
+                # Query overrides per-code settings so the whole batch is uniform.
+                use_preset = preset or row['qr_style_preset'] or 'whiteOnBlack'
+                use_icon = icon if icon is not None else (
+                    (row['center_icon'] or '').strip().lower() or None
+                )
+                if use_icon not in {'facebook', 'instagram', 'tiktok'}:
+                    use_icon = None
+                try:
+                    svg = qr_style.build_svg(scan_url, size=1200, preset=use_preset, center_icon=use_icon)
+                except Exception:
+                    continue
+                zf.writestr(f'{idx:03d}-{row["slug"]}.svg', svg)
+        data = zip_buf.getvalue()
+
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/zip')
+        self.send_header('Content-Length', str(len(data)))
+        fname = f'qr-dtf{"-" + batch if batch else ""}.zip'
+        self.send_header('Content-Disposition', f'attachment; filename="{fname}"')
+        self.send_header('Cache-Control', 'no-store')
+        self.end_headers()
+        self.wfile.write(data)
 
     def handle_twilio_voice(self):
         twiml = (
@@ -706,6 +860,7 @@ class Handler(BaseHTTPRequestHandler):
             'imageUrl': image_url,
             'videoUrl': video_url,
             'actionLink': body.get('actionLink') if isinstance(body.get('actionLink'), dict) else None,
+            'actionLink2': body.get('actionLink2') if isinstance(body.get('actionLink2'), dict) else None,
         }
         conn.execute('UPDATE qr_codes SET content_json = ?, updated_at = CURRENT_TIMESTAMP WHERE slug = ?', (json.dumps(content), slug))
         conn.commit()
