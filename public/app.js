@@ -210,6 +210,9 @@ async function renderAdmin() {
           <p>Fiecare QR are un link public pentru scanare și un cod alfanumeric unic pentru re-editare. PNG-ul se generează doar din dashboard-ul tău.</p>
           <div class="actions">
             <button id="createQr">Generează cod nou</button>
+            <button class="secondary" id="bulkCreateBtn">Generează lot</button>
+            <button class="secondary" id="exportCsvBtn">Export CSV</button>
+            <button class="secondary" id="exportDtfBtn">Export DTF (ZIP)</button>
             <button class="secondary" id="logoutBtn">Logout</button>
           </div>
         </div>
@@ -290,6 +293,58 @@ async function renderAdmin() {
     if (title === null) return;
     await api('/api/admin/qr-codes', { method: 'POST', body: JSON.stringify({ title }) });
     route();
+  };
+  document.getElementById('bulkCreateBtn').onclick = async () => {
+    const countStr = window.prompt('Câte coduri vrei să generezi? (1-1000)', '50');
+    if (countStr === null) return;
+    const count = parseInt(countStr, 10);
+    if (!Number.isInteger(count) || count < 1 || count > 1000) {
+      alert('Introdu un număr între 1 și 1000.');
+      return;
+    }
+    const batchLabel = window.prompt('Nume lot (ex: "Campanie Mai") — opțional:', '');
+    if (batchLabel === null) return;
+    const btn = document.getElementById('bulkCreateBtn');
+    btn.textContent = 'Generez...';
+    btn.disabled = true;
+    try {
+      const res = await api('/api/admin/bulk-create', {
+        method: 'POST',
+        body: JSON.stringify({ count, batchLabel: batchLabel.trim() }),
+      });
+      alert(`Am creat ${res.created} coduri${res.batchLabel ? ` în lotul "${res.batchLabel}"` : ''}.`);
+      route();
+    } catch (error) {
+      alert('Generarea lotului a eșuat.');
+      btn.textContent = 'Generează lot';
+      btn.disabled = false;
+    }
+  };
+  document.getElementById('exportCsvBtn').onclick = () => {
+    const batch = window.prompt('Export CSV pentru ce lot? (lasă gol pentru TOATE codurile)', '');
+    if (batch === null) return;
+    const url = `/api/admin/export-csv${batch.trim() ? `?batch=${encodeURIComponent(batch.trim())}` : ''}`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+  document.getElementById('exportDtfBtn').onclick = () => {
+    const batch = window.prompt('Export QR-uri DTF pentru ce lot? (lasă gol pentru TOATE)', '');
+    if (batch === null) return;
+    const preset = window.prompt('Stil QR pentru print (whiteOnBlack / instagramGlow / instagramGlowLight):', 'whiteOnBlack');
+    if (preset === null) return;
+    const params = new URLSearchParams();
+    if (batch.trim()) params.set('batch', batch.trim());
+    if (preset.trim()) params.set('preset', preset.trim());
+    const a = document.createElement('a');
+    a.href = `/api/admin/export-dtf-zip?${params.toString()}`;
+    a.download = '';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
   document.getElementById('logoutBtn').onclick = async () => {
     await api('/api/logout', { method: 'POST' });
@@ -1232,6 +1287,7 @@ function previewMarkup(content, label = 'Previzualizare live', options = {}) {
   const mediaStyle = mediaAlignStyle(content.theme.textAlign);
   const reviewsEnabled = Boolean(googleReviews?.enabled && googleReviews?.embedUrl);
   const actionLink = linkOverride || normalizeActionLink(content.actionLink?.url, content.actionLink?.label);
+  const actionLink2 = linkOverride ? null : normalizeActionLink(content.actionLink2?.url, content.actionLink2?.label);
 
   return html`
     ${showLabel ? `<span class="badge" style="background:${content.theme.accent}22;color:${content.theme.accent};border-color:${content.theme.accent}66">${label}</span>` : ''}
@@ -1241,6 +1297,7 @@ function previewMarkup(content, label = 'Previzualizare live', options = {}) {
     ${hasVideo ? `<video src="${escapeAttribute(content.videoUrl)}" controls autoplay playsinline loop preload="auto" data-autoplay-video="true" style="${mediaStyle}"></video>` : ''}
     ${showButton && buttonLabel ? `<button type="button" style="width:max-content;background:linear-gradient(135deg, ${content.theme.accent}, #6b7280)">${escapeHtml(buttonLabel)}</button>` : ''}
     ${actionLink ? `<a href="${escapeAttribute(actionLink.url)}" target="_blank" rel="noopener noreferrer" class="platform-link-btn platform-${escapeAttribute(actionLink.platform)}" style="--accent:${content.theme.accent};">${escapeHtml(actionLink.label)}</a>` : ''}
+    ${actionLink2 ? `<a href="${escapeAttribute(actionLink2.url)}" target="_blank" rel="noopener noreferrer" class="platform-link-btn platform-${escapeAttribute(actionLink2.platform)}" style="--accent:${content.theme.accent};">${escapeHtml(actionLink2.label)}</a>` : ''}
     ${reviewsEnabled ? html`
       <div class="google-reviews-block">
         <div class="google-reviews-header">${escapeHtml(googleReviews.buttonLabel || 'Recenzii Google')}</div>
@@ -1375,6 +1432,8 @@ async function renderPublicEditor(slug, data) {
             ${data.hasContent ? `<div class="small" style="margin-bottom:16px;">Cod validat: <span class="code">${escapeHtml(storedCode)}</span></div>` : ''}
             <label>Link extern (platformă)<input name="actionLinkUrl" value="${escapeHtml(content.actionLink?.url || '')}" placeholder="https://instagram.com/..." /></label>
             <label>Text buton link (opțional)<input name="actionLinkLabel" value="${escapeHtml(content.actionLink?.label || '')}" placeholder="Ex: Urmărește-ne pe Instagram" /></label>
+            <label>Al doilea link extern (opțional)<input name="actionLink2Url" value="${escapeHtml(content.actionLink2?.url || '')}" placeholder="https://tiktok.com/..." /></label>
+            <label>Text al doilea buton (opțional)<input name="actionLink2Label" value="${escapeHtml(content.actionLink2?.label || '')}" placeholder="Ex: Vezi pe TikTok" /></label>
             <div class="grid grid-2">
               <label>Imagine (upload)<input type="file" name="imageFile" accept="image/png,image/jpeg,image/webp" /></label>
               <label>Video (upload)<input type="file" name="videoFile" accept="video/mp4,video/webm" /></label>
@@ -1427,6 +1486,7 @@ async function renderPublicEditor(slug, data) {
       imageUrl: formData.get('imageUrl') || content.imageUrl,
       videoUrl: formData.get('videoUrl') || content.videoUrl,
       actionLink: normalizeActionLink(formData.get('actionLinkUrl'), formData.get('actionLinkLabel')),
+      actionLink2: normalizeActionLink(formData.get('actionLink2Url'), formData.get('actionLink2Label')),
       votingEligible: formData.get('votingEligible') === 'on',
       theme: content.theme,
       textStyle: {
@@ -1460,6 +1520,7 @@ async function renderPublicEditor(slug, data) {
       imageUrl: formData.get('imageUrl'),
       videoUrl: formData.get('videoUrl'),
       actionLink: normalizeActionLink(formData.get('actionLinkUrl'), formData.get('actionLinkLabel')),
+      actionLink2: normalizeActionLink(formData.get('actionLink2Url'), formData.get('actionLink2Label')),
       votingEligible: formData.get('votingEligible') === 'on',
       imageDataUrl: await getDataUrl(state.selectedFileImage),
       videoDataUrl: await getDataUrl(state.selectedFileVideo),
