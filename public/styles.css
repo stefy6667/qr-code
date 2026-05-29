@@ -447,3 +447,77 @@ button.danger { background: linear-gradient(135deg, var(--danger), #be123c); }
   color: #ffffff;
   border-color: rgba(168, 85, 247, 0.8);
 }
+
+/* ============================================================
+ * Mobile responsiveness for the public/preview page.
+ * Tablet/small-laptop breakpoint first, phone breakpoint second.
+ * ============================================================ */
+.public-preview, .preview-inner {
+  /* Long unbroken URLs and emojis must wrap on phones. */
+  overflow-wrap: anywhere;
+  word-wrap: break-word;
+}
+.public-preview h2,
+.preview-inner h2,
+.public-preview p,
+.preview-inner p,
+.content-text {
+  overflow-wrap: anywhere;
+  word-wrap: break-word;
+  hyphens: auto;
+  max-width: 100%;
+}
+.public-preview img,
+.preview-inner img,
+.public-preview video,
+.preview-inner video {
+  max-width: 100%;
+  height: auto;
+}
+
+@media (max-width: 760px) {
+  .public-preview h2,
+  .preview-inner h2 {
+    font-size: clamp(1.6rem, 6.5vw, 2.4rem);
+    line-height: 1.15;
+  }
+  .public-preview p,
+  .preview-inner p,
+  .content-text {
+    font-size: clamp(1rem, 4.2vw, 1.15rem);
+    line-height: 1.5;
+  }
+  .platform-link-btn {
+    /* Stop overflowing the viewport on narrow phones. */
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    justify-content: center;
+    white-space: normal;
+    text-align: center;
+    padding: 14px 18px;
+    font-size: 0.95rem;
+    overflow-wrap: anywhere;
+    word-wrap: break-word;
+  }
+  .public-shell .container,
+  .container {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .public-preview .preview-inner {
+    min-height: auto;
+    padding: 20px;
+  }
+}
+
+@media (max-width: 420px) {
+  .public-preview h2,
+  .preview-inner h2 {
+    font-size: clamp(1.4rem, 7vw, 2rem);
+  }
+  .platform-link-btn {
+    padding: 12px 14px;
+    font-size: 0.9rem;
+  }
+}
