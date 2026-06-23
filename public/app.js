@@ -101,6 +101,104 @@ const qrStylePresets = {
   }
 };
 
+function presetSwatchStyle(key) {
+  const preset = qrStylePresets[key];
+  if (!preset) return 'background:#333';
+  // The 3 server-rendered presets don't carry `fill` data here (they're
+  // rendered in qr_style.py instead) — hardcode a representative swatch
+  // matching their actual look.
+  if (key === 'instagramGlow') {
+    return 'background: linear-gradient(160deg, #A011DB, #C026D3, #F97316);';
+  }
+  if (key === 'instagramGlowLight') {
+    return 'background: linear-gradient(160deg, #7C3AED, #DB2777, #EA580C); box-shadow: inset 0 0 0 2px #fff;';
+  }
+  if (key === 'whiteOnBlack') {
+    return 'background: repeating-conic-gradient(#fff 0% 25%, #111 0% 50%); background-size: 10px 10px;';
+  }
+  if (preset.fill && typeof preset.fill === 'object') {
+    const stops = preset.fill.colorStops.map(([offset, color]) => `${color} ${Math.round(offset * 100)}%`).join(', ');
+    if (preset.fill.type === 'radial-gradient') {
+      return `background: radial-gradient(circle, ${stops});`;
+    }
+    const [x0, y0, x1, y1] = preset.fill.position;
+    const angleDeg = Math.round(Math.atan2(y1 - y0, x1 - x0) * 180 / Math.PI + 90);
+    return `background: linear-gradient(${angleDeg}deg, ${stops});`;
+  }
+  if (typeof preset.fill === 'string') {
+    return `background: ${preset.background}; box-shadow: inset 0 0 0 6px ${preset.fill};`;
+  }
+  return `background:${preset.background || '#333'}`;
+}
+
+/**
+ * Modal with a checkbox grid (instead of a typed comma-separated list) for
+ * picking which QR design models to include in a production batch. Using
+ * checkboxes instead of free text eliminates the whole class of bugs where
+ * a mistyped/duplicated model name silently skewed per-model counts.
+ * Resolves to {models, perModel, batchLabel} or null if cancelled.
+ */
+function openBulkCreateModal() {
+  return new Promise((resolve) => {
+    const modelKeys = Object.keys(qrStylePresets);
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = html`
+      <div class="modal-box">
+        <h3>Generează lot de coduri QR</h3>
+        <p class="modal-sub">Bifează modelele dorite, apoi alege câte coduri vrei din fiecare.</p>
+        <div class="modal-select-all">
+          <button type="button" id="bcSelectAll">Selectează tot</button>
+          <button type="button" id="bcSelectNone">Deselectează tot</button>
+        </div>
+        <div class="model-grid">
+          ${modelKeys.map((key) => html`
+            <label class="model-checkbox">
+              <input type="checkbox" value="${key}" checked />
+              <span class="model-swatch" style="${presetSwatchStyle(key)}"></span>
+              <span class="model-name">${escapeHtml(qrStylePresets[key].label)}</span>
+            </label>
+          `).join('')}
+        </div>
+        <div class="modal-row">
+          <label>Coduri per model<input type="number" id="bcPerModel" value="15" min="1" max="200" /></label>
+          <label>Nume lot (opțional)<input type="text" id="bcBatchLabel" placeholder="Campanie Mai" /></label>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="secondary" id="bcCancel">Anulează</button>
+          <button type="button" id="bcConfirm">Generează</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const cleanup = () => document.body.removeChild(overlay);
+    overlay.querySelector('#bcCancel').onclick = () => { cleanup(); resolve(null); };
+    overlay.onclick = (e) => { if (e.target === overlay) { cleanup(); resolve(null); } };
+    overlay.querySelector('#bcSelectAll').onclick = () => {
+      overlay.querySelectorAll('input[type="checkbox"]').forEach((cb) => { cb.checked = true; });
+    };
+    overlay.querySelector('#bcSelectNone').onclick = () => {
+      overlay.querySelectorAll('input[type="checkbox"]').forEach((cb) => { cb.checked = false; });
+    };
+    overlay.querySelector('#bcConfirm').onclick = () => {
+      const checked = Array.from(overlay.querySelectorAll('input[type="checkbox"]:checked')).map((cb) => cb.value);
+      const perModel = parseInt(overlay.querySelector('#bcPerModel').value, 10);
+      const batchLabel = overlay.querySelector('#bcBatchLabel').value.trim();
+      if (checked.length === 0) {
+        alert('Bifează cel puțin un model.');
+        return;
+      }
+      if (!Number.isInteger(perModel) || perModel < 1 || perModel > 200) {
+        alert('Introdu un număr valid de coduri per model (1-200).');
+        return;
+      }
+      cleanup();
+      resolve({ models: checked, perModel, batchLabel });
+    };
+  });
+}
+
 function html(strings, ...values) {
   return strings.reduce((acc, str, i) => acc + str + (values[i] ?? ''), '');
 }
@@ -213,6 +311,7 @@ async function renderAdmin() {
             <button class="secondary" id="bulkCreateBtn">Generează lot</button>
             <button class="secondary" id="exportCsvBtn">Export CSV</button>
             <button class="secondary" id="exportDtfBtn">Export DTF (ZIP)</button>
+            <button class="danger" id="deleteBatchBtn">Șterge lot</button>
             <button class="secondary" id="logoutBtn">Logout</button>
           </div>
         </div>
@@ -298,29 +397,10 @@ async function renderAdmin() {
   // presets and the 7 canvas presets, which qr_style.py replicates
   // server-side as build_generic_svg). Derived from qrStylePresets so this
   // never drifts out of sync if a model is added/removed later.
-  const PRINT_READY_MODELS = Object.keys(qrStylePresets);
   document.getElementById('bulkCreateBtn').onclick = async () => {
-    const modelLines = PRINT_READY_MODELS.map((key) => `${key} (${qrStylePresets[key].label})`).join('\n');
-    const modelsStr = window.prompt(
-      `Ce modele de QR vrei să generezi? Separă prin virgulă, folosind numele scurt.\nModele disponibile:\n${modelLines}\n(Enter pentru toate ${PRINT_READY_MODELS.length})`,
-      PRINT_READY_MODELS.join(', ')
-    );
-    if (modelsStr === null) return;
-    const models = modelsStr.split(',').map((m) => m.trim()).filter(Boolean);
-    const invalid = models.filter((m) => !PRINT_READY_MODELS.includes(m));
-    if (models.length === 0 || invalid.length > 0) {
-      alert(`Modele necunoscute: ${invalid.join(', ') || '(listă goală)'}.\nFolosește exact: ${PRINT_READY_MODELS.join(', ')}`);
-      return;
-    }
-    const perModelStr = window.prompt('Câte coduri per model? (1-200)', '15');
-    if (perModelStr === null) return;
-    const perModel = parseInt(perModelStr, 10);
-    if (!Number.isInteger(perModel) || perModel < 1 || perModel > 200) {
-      alert('Introdu un număr între 1 și 200.');
-      return;
-    }
-    const batchLabel = window.prompt('Nume lot (ex: "Campanie Mai") — opțional:', '');
-    if (batchLabel === null) return;
+    const picked = await openBulkCreateModal();
+    if (!picked) return;
+    const { models, perModel, batchLabel } = picked;
     const total = models.length * perModel;
     if (!window.confirm(`Voi genera ${perModel} coduri × ${models.length} modele = ${total} coduri în total. Continui?`)) return;
     const btn = document.getElementById('bulkCreateBtn');
@@ -329,9 +409,15 @@ async function renderAdmin() {
     try {
       const res = await api('/api/admin/bulk-create', {
         method: 'POST',
-        body: JSON.stringify({ models, perModel, batchLabel: batchLabel.trim() }),
+        body: JSON.stringify({ models, perModel, batchLabel }),
       });
-      alert(`Am creat ${res.created} coduri (${res.perModel} x ${res.models.length} modele)${res.batchLabel ? ` în lotul "${res.batchLabel}"` : ''}.`);
+      // Show the EXACT per-model breakdown the server actually created, so
+      // any future discrepancy is immediately visible instead of being
+      // discovered later in the CSV/ZIP.
+      const breakdown = Object.entries(res.countsByModel || {})
+        .map(([model, count]) => `  ${model}: ${count}`)
+        .join('\n');
+      alert(`Am creat ${res.created} coduri${res.batchLabel ? ` în lotul "${res.batchLabel}"` : ''}.\n\nPe model:\n${breakdown}`);
       route();
     } catch (error) {
       alert('Generarea lotului a eșuat.');
@@ -369,6 +455,39 @@ async function renderAdmin() {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+  };
+  document.getElementById('deleteBatchBtn').onclick = async () => {
+    const batch = window.prompt('Ce lot vrei să ștergi? (numele exact, sensibil la majuscule)', '');
+    if (batch === null || !batch.trim()) return;
+    const trimmed = batch.trim();
+    const count = state.items.filter((item) => item.batchLabel === trimmed).length;
+    if (count === 0) {
+      alert(`Nu am găsit niciun cod în lotul "${trimmed}".`);
+      return;
+    }
+    const warning = `Vei șterge PERMANENT ${count} coduri din lotul "${trimmed}".\n\nDacă vreo haină cu aceste coduri e deja imprimată sau vândută, codul ei va înceta să funcționeze imediat (404).\n\nAceastă acțiune NU poate fi anulată.`;
+    if (!window.confirm(warning)) return;
+    const retype = window.prompt(`Pentru confirmare finală, scrie din nou numele lotului ("${trimmed}"):`, '');
+    if (retype !== trimmed) {
+      alert('Numele nu corespunde — ștergerea a fost anulată.');
+      return;
+    }
+    const btn = document.getElementById('deleteBatchBtn');
+    btn.textContent = 'Șterg...';
+    btn.disabled = true;
+    try {
+      const res = await api('/api/admin/delete-batch', {
+        method: 'POST',
+        body: JSON.stringify({ batchLabel: trimmed }),
+      });
+      alert(`Am șters ${res.deleted} coduri din lotul "${res.batchLabel}".`);
+      route();
+    } catch (error) {
+      alert('Ștergerea lotului a eșuat.');
+    } finally {
+      btn.textContent = 'Șterge lot';
+      btn.disabled = false;
+    }
   };
   document.getElementById('logoutBtn').onclick = async () => {
     await api('/api/logout', { method: 'POST' });
