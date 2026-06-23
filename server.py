@@ -427,19 +427,76 @@ class Handler(BaseHTTPRequestHandler):
         """Create N codes in one go, optionally tagged with a batch label.
 
         Body: {"count": 100, "batchLabel": "Campanie Mai", "titlePrefix": "QR"}
-        Returns the list of created {slug, editCode}.
+        Two modes:
+          - Legacy: {"count": 50, "batchLabel": "...", "titlePrefix": "..."}
+            creates `count` codes with no preset assigned (uses whatever
+            default the editor applies).
+          - Multi-model: {"models": ["instagramGlow", "whiteOnBlack"],
+            "perModel": 15, "batchLabel": "...", "titlePrefix": "..."}
+            creates `perModel` codes for EACH model listed, each one tagged
+            with that model as its qr_style_preset — e.g. 3 models x 15 =
+            45 codes total. This is the production-batch mode used for DTF
+            print runs across several QR designs at once.
+
+        Returns the list of created {slug, editCode, qrStylePreset}.
         """
         if not self.require_admin():
             return
         body = parse_body(self)
+        batch_label = (body.get('batchLabel') or '').strip() or None
+        title_prefix = (body.get('titlePrefix') or 'Cod QR').strip() or 'Cod QR'
+
+        models = body.get('models')
+        if isinstance(models, list) and models:
+            # Multi-model mode: validate every model against the
+            # server-renderable presets (only these can be exported as
+            # print-ready DTF SVGs).
+            valid_models = [m for m in models if isinstance(m, str) and m in qr_style.ALL_PRESETS]
+            if not valid_models:
+                return json_response(
+                    self,
+                    {'ok': False, 'error': f'No valid models. Allowed: {", ".join(sorted(qr_style.ALL_PRESETS))}'},
+                    status=400,
+                )
+            try:
+                per_model = int(body.get('perModel') or 0)
+            except (TypeError, ValueError):
+                per_model = 0
+            if per_model < 1 or per_model > 200:
+                return json_response(self, {'ok': False, 'error': 'perModel must be between 1 and 200'}, status=400)
+
+            conn = db()
+            created = []
+            for model in valid_models:
+                for i in range(per_model):
+                    for _attempt in range(5):
+                        slug = random_slug()
+                        edit_code = random_code()
+                        try:
+                            conn.execute(
+                                'INSERT INTO qr_codes (slug, edit_code, title, batch_label, qr_style_preset) '
+                                'VALUES (?, ?, ?, ?, ?)',
+                                (slug, edit_code, f'{title_prefix} {model} {i + 1}', batch_label, model),
+                            )
+                            created.append({'slug': slug, 'editCode': edit_code, 'qrStylePreset': model})
+                            break
+                        except sqlite3.IntegrityError:
+                            continue
+            conn.commit()
+            conn.close()
+            json_response(self, {
+                'ok': True, 'created': len(created), 'batchLabel': batch_label,
+                'models': valid_models, 'perModel': per_model, 'items': created,
+            })
+            return
+
+        # Legacy single-count mode.
         try:
             count = int(body.get('count') or 0)
         except (TypeError, ValueError):
             count = 0
         if count < 1 or count > 1000:
             return json_response(self, {'ok': False, 'error': 'count must be between 1 and 1000'}, status=400)
-        batch_label = (body.get('batchLabel') or '').strip() or None
-        title_prefix = (body.get('titlePrefix') or 'Cod QR').strip() or 'Cod QR'
 
         conn = db()
         created = []
@@ -473,14 +530,14 @@ class Handler(BaseHTTPRequestHandler):
         conn = db()
         if batch:
             rows = conn.execute(
-                'SELECT id, slug, edit_code, title, batch_label, created_at, scan_count '
-                'FROM qr_codes WHERE batch_label = ? ORDER BY id',
+                'SELECT id, slug, edit_code, title, batch_label, qr_style_preset, created_at, scan_count '
+                'FROM qr_codes WHERE batch_label = ? ORDER BY qr_style_preset, id',
                 (batch,),
             ).fetchall()
         else:
             rows = conn.execute(
-                'SELECT id, slug, edit_code, title, batch_label, created_at, scan_count '
-                'FROM qr_codes ORDER BY id'
+                'SELECT id, slug, edit_code, title, batch_label, qr_style_preset, created_at, scan_count '
+                'FROM qr_codes ORDER BY qr_style_preset, id'
             ).fetchall()
         conn.close()
 
@@ -488,15 +545,15 @@ class Handler(BaseHTTPRequestHandler):
         writer = csv.writer(buf)
         writer.writerow([
             'nr', 'slug', 'scan_url', 'edit_code', 'edit_url',
-            'title', 'batch', 'created_at', 'scan_count',
+            'title', 'batch', 'model', 'created_at', 'scan_count',
         ])
         for idx, row in enumerate(rows, start=1):
             scan_url = f'{BASE_URL}/c/{row["slug"]}'
             edit_url = f'{BASE_URL}/edit?code={row["edit_code"]}'
             writer.writerow([
                 idx, row['slug'], scan_url, row['edit_code'], edit_url,
-                row['title'], row['batch_label'] or '', row['created_at'],
-                row['scan_count'],
+                row['title'], row['batch_label'] or '', row['qr_style_preset'] or '',
+                row['created_at'], row['scan_count'],
             ])
         data = buf.getvalue().encode('utf-8-sig')  # BOM so Excel shows diacritics
 
@@ -513,48 +570,77 @@ class Handler(BaseHTTPRequestHandler):
         """Download a ZIP of print-ready QR SVGs for a batch (or all).
 
         Query:
-            ?batch=<label>     optional batch filter
-            ?preset=<preset>   QR style preset (default whiteOnBlack)
-            ?icon=<icon>       optional center icon for all
-        SVGs are vector — DTF printers scale them to any size/DPI cleanly.
-        Files are named NNN-<slug>.svg so they line up with the CSV register.
+            ?batch=<label>      optional batch filter
+            ?preset=<preset>    force one style for ALL codes (optional —
+                                 by default each code uses its own assigned
+                                 qr_style_preset, which is how multi-model
+                                 batches from bulk-create come out correctly
+                                 organized into one folder per model)
+            ?icon=<icon>        optional center icon override for all
+            ?sizeMm=<float>     physical QR size in mm (default 170 = 17cm)
+
+        Each SVG is print-ready: real-world mm dimensions (so DTF software
+        opens it at the exact physical size, no manual scaling) plus the
+        code's edit/configuration code printed in a small label under the
+        QR for production QA. Files are grouped into one subfolder per
+        model (e.g. "instagramGlow/001-abc123.svg") and also numbered
+        globally to line up with the CSV register's `nr` column.
         """
         if not self.require_admin():
             return
         params = parse_qs(parsed.query)
         batch = (params.get('batch', [''])[0] or '').strip()
-        preset = (params.get('preset', ['whiteOnBlack'])[0] or 'whiteOnBlack').strip()
+        # Empty string means "use each code's own preset" — only force a
+        # single style across the whole batch if explicitly requested.
+        forced_preset = (params.get('preset', [''])[0] or '').strip()
         icon = (params.get('icon', [''])[0] or '').strip().lower()
         icon = icon if icon in {'facebook', 'instagram', 'tiktok'} else None
+        try:
+            size_mm = float(params.get('sizeMm', ['170'])[0])
+        except (TypeError, ValueError):
+            size_mm = 170.0
+        size_mm = max(20.0, min(size_mm, 1000.0))
 
         conn = db()
         if batch:
             rows = conn.execute(
-                'SELECT slug, qr_style_preset, center_icon FROM qr_codes WHERE batch_label = ? ORDER BY id',
+                'SELECT slug, edit_code, qr_style_preset, center_icon FROM qr_codes '
+                'WHERE batch_label = ? ORDER BY qr_style_preset, id',
                 (batch,),
             ).fetchall()
         else:
             rows = conn.execute(
-                'SELECT slug, qr_style_preset, center_icon FROM qr_codes ORDER BY id'
+                'SELECT slug, edit_code, qr_style_preset, center_icon FROM qr_codes '
+                'ORDER BY qr_style_preset, id'
             ).fetchall()
         conn.close()
 
         zip_buf = io.BytesIO()
+        per_model_counter = {}
         with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
             for idx, row in enumerate(rows, start=1):
                 scan_url = f'{BASE_URL}/c/{row["slug"]}'
-                # Query overrides per-code settings so the whole batch is uniform.
-                use_preset = preset or row['qr_style_preset'] or 'whiteOnBlack'
+                use_preset = forced_preset or row['qr_style_preset'] or 'whiteOnBlack'
+                if use_preset not in qr_style.ALL_PRESETS:
+                    use_preset = 'whiteOnBlack'
                 use_icon = icon if icon is not None else (
                     (row['center_icon'] or '').strip().lower() or None
                 )
                 if use_icon not in {'facebook', 'instagram', 'tiktok'}:
                     use_icon = None
                 try:
-                    svg = qr_style.build_svg(scan_url, size=1200, preset=use_preset, center_icon=use_icon)
+                    svg = qr_style.build_print_ready_svg(
+                        scan_url,
+                        preset=use_preset,
+                        center_icon=use_icon,
+                        edit_code=row['edit_code'],
+                        qr_size_mm=size_mm,
+                    )
                 except Exception:
                     continue
-                zf.writestr(f'{idx:03d}-{row["slug"]}.svg', svg)
+                per_model_counter[use_preset] = per_model_counter.get(use_preset, 0) + 1
+                model_idx = per_model_counter[use_preset]
+                zf.writestr(f'{use_preset}/{model_idx:03d}-{row["slug"]}.svg', svg)
         data = zip_buf.getvalue()
 
         self.send_response(200)

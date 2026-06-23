@@ -209,6 +209,225 @@ def _rounded_rect_path(x: float, y: float, w: float, h: float, r: float) -> str:
     )
 
 
+def _module_path_per_corner(x: float, y: float, w: float, h: float, r: float,
+                            nw: bool, ne: bool, se: bool, sw: bool) -> str:
+    """One QR module as a path whose corners are rounded ONLY where flagged
+    True. This replicates the neighbor-aware corner rounding used by the
+    `qr-creator` JS library (the engine behind the client-side canvas
+    presets): a module's corner is rounded only if both edge-neighbors that
+    share that corner are off, so connected modules merge into smooth
+    blobs/pills while isolated modules (all 4 corners rounded) become full
+    circles when radius=0.5."""
+    parts = []
+    parts.append(f'M {x + r:.2f} {y:.2f}' if nw else f'M {x:.2f} {y:.2f}')
+    if ne:
+        parts.append(f'L {x + w - r:.2f} {y:.2f}')
+        parts.append(f'Q {x + w:.2f} {y:.2f} {x + w:.2f} {y + r:.2f}')
+    else:
+        parts.append(f'L {x + w:.2f} {y:.2f}')
+    if se:
+        parts.append(f'L {x + w:.2f} {y + h - r:.2f}')
+        parts.append(f'Q {x + w:.2f} {y + h:.2f} {x + w - r:.2f} {y + h:.2f}')
+    else:
+        parts.append(f'L {x + w:.2f} {y + h:.2f}')
+    if sw:
+        parts.append(f'L {x + r:.2f} {y + h:.2f}')
+        parts.append(f'Q {x:.2f} {y + h:.2f} {x:.2f} {y + h - r:.2f}')
+    else:
+        parts.append(f'L {x:.2f} {y + h:.2f}')
+    if nw:
+        parts.append(f'L {x:.2f} {y + r:.2f}')
+        parts.append(f'Q {x:.2f} {y:.2f} {x + r:.2f} {y:.2f}')
+    else:
+        parts.append(f'L {x:.2f} {y:.2f}')
+    parts.append('Z')
+    return f'<path d="{" ".join(parts)}"/>'
+
+
+# Presets that mirror the client-side canvas styles (rendered in the browser
+# via the `qr-creator` JS library with `buildQrRenderConfig` in app.js).
+# Keep these dicts in exact sync with `qrStylePresets` there — same radius,
+# same fill (solid color or gradient spec), same background — so the server
+# export looks identical to what people see live in the editor preview.
+GENERIC_PRESETS = {
+    'aurora': {
+        'radius': 0.38,
+        'fill': {'type': 'linear-gradient', 'position': [0, 0, 1, 1],
+                 'colorStops': [[0, '#22d3ee'], [0.55, '#4f46e5'], [1, '#d946ef']]},
+        'background': '#ffffff',
+    },
+    'ember': {
+        'radius': 0.46,
+        'fill': {'type': 'radial-gradient', 'position': [0.5, 0.5, 0.12, 0.5, 0.5, 0.75],
+                 'colorStops': [[0, '#fde047'], [0.55, '#f97316'], [1, '#ef4444']]},
+        'background': '#111111',
+    },
+    'ocean': {
+        'radius': 0.18,
+        'fill': {'type': 'linear-gradient', 'position': [0, 0, 1, 1],
+                 'colorStops': [[0, '#0f172a'], [0.4, '#1d4ed8'], [1, '#38bdf8']]},
+        'background': '#ffffff',
+    },
+    'frost': {
+        'radius': 0.3,
+        'fill': {'type': 'linear-gradient', 'position': [0, 0, 0, 1],
+                 'colorStops': [[0, '#0ea5e9'], [1, '#ffffff']]},
+        'background': '#111827',
+    },
+    'mono': {
+        'radius': 0.5,
+        'fill': '#2f2f2f',
+        'background': '#ffffff',
+    },
+    'sunset': {
+        'radius': 0.45,
+        'fill': {'type': 'linear-gradient', 'position': [0, 0, 1, 1],
+                 'colorStops': [[0, '#9333ea'], [0.5, '#ec4899'], [1, '#f59e0b']]},
+        'background': '#151515',
+    },
+    'neonSocial': {
+        'radius': 0.5,
+        'fill': {'type': 'linear-gradient', 'position': [0, 0, 0, 1],
+                 'colorStops': [[0, '#8b1cf6'], [0.52, '#d946ef'], [1, '#f97316']]},
+        'background': '#101010',
+    },
+}
+
+# All 10 model names across both rendering engines — used for validating
+# which presets are acceptable for bulk-create / DTF export.
+ALL_PRESETS = set(PRESETS.keys()) | set(GENERIC_PRESETS.keys())
+
+
+def _fill_to_svg_paint(fill, size: float, grad_id: str, defs: list) -> str:
+    """Convert a qr-creator-style `fill` spec (hex string, or a
+    linear/radial gradient dict with `position` + `colorStops` given as
+    fractions of the QR size — exactly mirroring the canvas
+    createLinearGradient/createRadialGradient convention) into an SVG paint
+    reference, appending any needed gradient <defs> entry."""
+    if isinstance(fill, str):
+        return fill
+    ftype = fill.get('type')
+    pos = fill.get('position') or []
+    stops = fill.get('colorStops') or []
+    stop_svg = ''.join(
+        f'<stop offset="{off * 100:.4f}%" stop-color="{color}"/>'
+        for off, color in stops
+    )
+    if ftype == 'linear-gradient' and len(pos) == 4:
+        x0, y0, x1, y1 = pos
+        defs.append(
+            f'<linearGradient id="{grad_id}" gradientUnits="userSpaceOnUse" '
+            f'x1="{x0 * size:.3f}" y1="{y0 * size:.3f}" '
+            f'x2="{x1 * size:.3f}" y2="{y1 * size:.3f}">{stop_svg}</linearGradient>'
+        )
+        return f'url(#{grad_id})'
+    if ftype == 'radial-gradient' and len(pos) == 6:
+        # Mirrors canvas createRadialGradient(x0,y0,r0, x1,y1,r1): an inner
+        # focal circle (x0,y0,r0) blending out to an outer circle (x1,y1,r1).
+        # SVG's fx/fy/fr + cx/cy/r reproduce this exactly (fr needs a fairly
+        # modern SVG renderer — fine for browser/print-software use).
+        x0, y0, r0, x1, y1, r1 = pos
+        defs.append(
+            f'<radialGradient id="{grad_id}" gradientUnits="userSpaceOnUse" '
+            f'cx="{x1 * size:.3f}" cy="{y1 * size:.3f}" r="{r1 * size:.3f}" '
+            f'fx="{x0 * size:.3f}" fy="{y0 * size:.3f}" fr="{r0 * size:.3f}">{stop_svg}</radialGradient>'
+        )
+        return f'url(#{grad_id})'
+    return '#000000'
+
+
+def build_generic_svg(
+    data: str,
+    preset: str = 'aurora',
+    size: int = 1200,
+    center_icon: str = None,
+) -> str:
+    """Server-side SVG equivalent of the client-side canvas presets (aurora,
+    ember, ocean, frost, mono, sunset, neonSocial) — used for DTF bulk
+    export so ALL 10 QR models (not just the 3 server-svg ones) can be
+    produced as print-ready vector files.
+
+    Replicates `qr-creator`'s rendering: every dark module (finder patterns
+    included — this engine does not give them special treatment) is drawn
+    with per-corner rounding based on neighbor adjacency, at error
+    correction level H (matching `buildQrRenderConfig`'s hardcoded ecLevel
+    in app.js), so the module count/look matches the live browser preview.
+    """
+    import segno
+
+    cfg = GENERIC_PRESETS.get(preset)
+    if not cfg:
+        raise ValueError(f'Unknown generic preset: {preset}')
+
+    icon_key = center_icon if center_icon in SUPPORTED_ICONS else None
+
+    qr = segno.make(data, error='h', boost_error=False)
+    matrix = qr.matrix
+    n = len(matrix)
+    # Quiet zone kept small (2 modules) so the printed background
+    # square hugs the QR pattern tightly instead of wasting a thick
+    # border of solid color — at large print sizes (17cm) 2 modules
+    # is still a comfortable real-world margin for reliable scanning.
+    quiet = 2
+    total = n + quiet * 2
+    module_size = size / total
+
+    def is_dark(r: int, c: int) -> bool:
+        if r < 0 or r >= n or c < 0 or c >= n:
+            return False
+        return bool(matrix[r][c])
+
+    icon_modules = 0
+    if icon_key:
+        icon_modules = max(5, int(round(n * 0.18)))
+        if icon_modules % 2 == 0:
+            icon_modules += 1
+    center_r, center_c = n // 2, n // 2
+    half = icon_modules // 2
+
+    def in_icon(r: int, c: int) -> bool:
+        if not icon_key:
+            return False
+        return (center_r - half <= r <= center_r + half
+                and center_c - half <= c <= center_c + half)
+
+    defs: list = []
+    fill_paint = _fill_to_svg_paint(cfg['fill'], size, 'genericGrad', defs)
+    radius_factor = cfg.get('radius', 0)
+
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" '
+        f'viewBox="0 0 {size} {size}" width="{size}" height="{size}" '
+        f'shape-rendering="geometricPrecision">',
+    ]
+    if defs:
+        parts.append('<defs>' + ''.join(defs) + '</defs>')
+    if cfg.get('background'):
+        parts.append(f'<rect width="{size}" height="{size}" fill="{cfg["background"]}"/>')
+
+    parts.append(f'<g fill="{fill_paint}">')
+    for r in range(n):
+        for c in range(n):
+            if not is_dark(r, c) or in_icon(r, c):
+                continue
+            x = (c + quiet) * module_size
+            y = (r + quiet) * module_size
+            rad = radius_factor * module_size
+            nw = (not is_dark(r - 1, c)) and (not is_dark(r, c - 1))
+            ne = (not is_dark(r - 1, c)) and (not is_dark(r, c + 1))
+            se = (not is_dark(r + 1, c)) and (not is_dark(r, c + 1))
+            sw = (not is_dark(r + 1, c)) and (not is_dark(r, c - 1))
+            parts.append(_module_path_per_corner(x, y, module_size, module_size, rad, nw, ne, se, sw))
+    parts.append('</g>')
+
+    if icon_key:
+        icon_size_px = icon_modules * module_size
+        parts.append(_center_icon_svg(icon_key, size / 2, size / 2, icon_size_px))
+
+    parts.append('</svg>')
+    return ''.join(parts)
+
+
 def build_svg(
     data: str,
     size: int = 1200,
@@ -254,7 +473,11 @@ def build_svg(
     qr = segno.make(data, error=ec_level, boost_error=False)
     matrix = qr.matrix
     n = len(matrix)
-    quiet = 4
+    # Quiet zone kept small (2 modules) so the printed background
+    # square hugs the QR pattern tightly instead of wasting a thick
+    # border of solid color — at large print sizes (17cm) 2 modules
+    # is still a comfortable real-world margin for reliable scanning.
+    quiet = 2
     total = n + quiet * 2
     module_size = size / total
 
@@ -416,6 +639,84 @@ def build_svg(
         # icon's halo doesn't visually touch nearby modules.
         visual_size = icon_size_px * 0.88
         parts.append(_center_icon_svg(icon_key, size / 2, size / 2, visual_size))
+
+    parts.append('</svg>')
+    return ''.join(parts)
+
+
+def build_print_ready_svg(
+    data: str,
+    preset: str = 'whiteOnBlack',
+    center_icon: str = None,
+    edit_code: str = '',
+    qr_size_mm: float = 170.0,
+    label_gap_mm: float = 6.0,
+    label_height_mm: float = 22.0,
+) -> str:
+    """
+    Build a print-ready SVG for DTF production:
+      - the QR itself rendered at exactly `qr_size_mm` x `qr_size_mm`
+        (default 17x17 cm) using real-world millimeter units, so any RIP /
+        vector software opens it at the correct physical size with no
+        manual scaling.
+      - the human-readable edit/configuration code printed in a small white
+        label strip directly below the QR, so the code is visible on the
+        same print file (useful for production QA and for matching the
+        physical garment back to its DB row).
+
+    The canvas is taller than the QR (qr_size_mm + gap + label_height) to
+    fit the label; everything outside the QR's own background square and
+    the label pill stays transparent, so DTF film only prints ink where
+    there's actual artwork.
+    """
+    # Render the QR at a fixed internal resolution, then strip the outer
+    # <svg ...> wrapper so we can re-host the same content inside our
+    # mm-sized canvas at the right scale. Dispatches to whichever engine
+    # owns this preset name, so ALL 10 models (not just the 3 original
+    # server-svg presets) can be exported print-ready.
+    inner_size = 1000
+    if preset in PRESETS:
+        full = build_svg(data, size=inner_size, preset=preset, center_icon=center_icon)
+    elif preset in GENERIC_PRESETS:
+        full = build_generic_svg(data, size=inner_size, preset=preset, center_icon=center_icon)
+    else:
+        raise ValueError(f'Unknown preset: {preset}. Valid: {sorted(ALL_PRESETS)}')
+    inner_start = full.index('>') + 1
+    inner_end = full.rindex('</svg>')
+    inner = full[inner_start:inner_end]
+
+    scale = qr_size_mm / inner_size
+    canvas_w = qr_size_mm
+    canvas_h = qr_size_mm + label_gap_mm + label_height_mm
+
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" '
+        f'width="{canvas_w:.2f}mm" height="{canvas_h:.2f}mm" '
+        f'viewBox="0 0 {canvas_w:.2f} {canvas_h:.2f}" '
+        f'shape-rendering="geometricPrecision">',
+        f'<g transform="scale({scale:.6f})">{inner}</g>',
+    ]
+
+    code = (edit_code or '').strip()
+    if code:
+        label_w = min(canvas_w * 0.92, 140.0)
+        label_x = (canvas_w - label_w) / 2
+        label_y = qr_size_mm + label_gap_mm
+        radius = label_height_mm * 0.22
+        parts.append(
+            f'<rect x="{label_x:.2f}" y="{label_y:.2f}" '
+            f'width="{label_w:.2f}" height="{label_height_mm:.2f}" '
+            f'rx="{radius:.2f}" ry="{radius:.2f}" fill="#ffffff" '
+            f'stroke="#0a0a0a" stroke-width="0.4"/>'
+        )
+        text_y = label_y + label_height_mm / 2 + label_height_mm * 0.13
+        font_size = label_height_mm * 0.42
+        parts.append(
+            f'<text x="{canvas_w / 2:.2f}" y="{text_y:.2f}" '
+            f'font-family="Helvetica, Arial, sans-serif" font-weight="700" '
+            f'font-size="{font_size:.2f}" fill="#0a0a0a" text-anchor="middle" '
+            f'letter-spacing="0.5">{code}</text>'
+        )
 
     parts.append('</svg>')
     return ''.join(parts)
