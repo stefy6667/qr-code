@@ -521,3 +521,110 @@ button.danger { background: linear-gradient(135deg, var(--danger), #be123c); }
     font-size: 0.9rem;
   }
 }
+
+/* ============================================================
+ * Bulk-create modal: checkbox grid for picking QR design models
+ * ============================================================ */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+.modal-box {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 28px;
+  max-width: 640px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+.modal-box h3 { margin: 0 0 6px; font-size: 1.4rem; }
+.modal-sub { color: var(--muted); margin: 0 0 20px; font-size: 0.92rem; }
+.model-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 20px;
+}
+@media (max-width: 560px) {
+  .model-grid { grid-template-columns: 1fr; }
+}
+.model-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.03);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.model-checkbox:hover { background: rgba(255, 255, 255, 0.07); }
+.model-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #a855f7;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.model-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+.model-name { font-size: 0.88rem; color: var(--text); }
+.modal-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+@media (max-width: 560px) {
+  .modal-row { grid-template-columns: 1fr; }
+}
+.modal-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.modal-row input {
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: #0c0c0c;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.modal-select-all {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+.modal-select-all button {
+  background: none;
+  border: none;
+  color: #c4b5fd;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
