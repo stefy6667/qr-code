@@ -294,28 +294,48 @@ async function renderAdmin() {
     await api('/api/admin/qr-codes', { method: 'POST', body: JSON.stringify({ title }) });
     route();
   };
+  // All 10 QR models are exportable for DTF now (both the 3 server-svg
+  // presets and the 7 canvas presets, which qr_style.py replicates
+  // server-side as build_generic_svg). Derived from qrStylePresets so this
+  // never drifts out of sync if a model is added/removed later.
+  const PRINT_READY_MODELS = Object.keys(qrStylePresets);
   document.getElementById('bulkCreateBtn').onclick = async () => {
-    const countStr = window.prompt('Câte coduri vrei să generezi? (1-1000)', '50');
-    if (countStr === null) return;
-    const count = parseInt(countStr, 10);
-    if (!Number.isInteger(count) || count < 1 || count > 1000) {
-      alert('Introdu un număr între 1 și 1000.');
+    const modelLines = PRINT_READY_MODELS.map((key) => `${key} (${qrStylePresets[key].label})`).join('\n');
+    const modelsStr = window.prompt(
+      `Ce modele de QR vrei să generezi? Separă prin virgulă, folosind numele scurt.\nModele disponibile:\n${modelLines}\n(Enter pentru toate ${PRINT_READY_MODELS.length})`,
+      PRINT_READY_MODELS.join(', ')
+    );
+    if (modelsStr === null) return;
+    const models = modelsStr.split(',').map((m) => m.trim()).filter(Boolean);
+    const invalid = models.filter((m) => !PRINT_READY_MODELS.includes(m));
+    if (models.length === 0 || invalid.length > 0) {
+      alert(`Modele necunoscute: ${invalid.join(', ') || '(listă goală)'}.\nFolosește exact: ${PRINT_READY_MODELS.join(', ')}`);
+      return;
+    }
+    const perModelStr = window.prompt('Câte coduri per model? (1-200)', '15');
+    if (perModelStr === null) return;
+    const perModel = parseInt(perModelStr, 10);
+    if (!Number.isInteger(perModel) || perModel < 1 || perModel > 200) {
+      alert('Introdu un număr între 1 și 200.');
       return;
     }
     const batchLabel = window.prompt('Nume lot (ex: "Campanie Mai") — opțional:', '');
     if (batchLabel === null) return;
+    const total = models.length * perModel;
+    if (!window.confirm(`Voi genera ${perModel} coduri × ${models.length} modele = ${total} coduri în total. Continui?`)) return;
     const btn = document.getElementById('bulkCreateBtn');
     btn.textContent = 'Generez...';
     btn.disabled = true;
     try {
       const res = await api('/api/admin/bulk-create', {
         method: 'POST',
-        body: JSON.stringify({ count, batchLabel: batchLabel.trim() }),
+        body: JSON.stringify({ models, perModel, batchLabel: batchLabel.trim() }),
       });
-      alert(`Am creat ${res.created} coduri${res.batchLabel ? ` în lotul "${res.batchLabel}"` : ''}.`);
+      alert(`Am creat ${res.created} coduri (${res.perModel} x ${res.models.length} modele)${res.batchLabel ? ` în lotul "${res.batchLabel}"` : ''}.`);
       route();
     } catch (error) {
       alert('Generarea lotului a eșuat.');
+    } finally {
       btn.textContent = 'Generează lot';
       btn.disabled = false;
     }
@@ -334,11 +354,15 @@ async function renderAdmin() {
   document.getElementById('exportDtfBtn').onclick = () => {
     const batch = window.prompt('Export QR-uri DTF pentru ce lot? (lasă gol pentru TOATE)', '');
     if (batch === null) return;
-    const preset = window.prompt('Stil QR pentru print (whiteOnBlack / instagramGlow / instagramGlowLight):', 'whiteOnBlack');
-    if (preset === null) return;
+    const sizeStr = window.prompt('Dimensiune fizică a fiecărui QR (mm, implicit 170 = 17cm):', '170');
+    if (sizeStr === null) return;
+    const sizeMm = parseFloat(sizeStr) || 170;
+    // No preset prompt: each code keeps its own assigned model (set at
+    // bulk-create time), so the ZIP comes out pre-sorted into one folder
+    // per model automatically.
     const params = new URLSearchParams();
     if (batch.trim()) params.set('batch', batch.trim());
-    if (preset.trim()) params.set('preset', preset.trim());
+    params.set('sizeMm', String(sizeMm));
     const a = document.createElement('a');
     a.href = `/api/admin/export-dtf-zip?${params.toString()}`;
     a.download = '';
