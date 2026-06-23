@@ -18,6 +18,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, urlparse
 
 import qr_style
+import qr_raster
 import postcard
 
 ROOT = Path(__file__).resolve().parent
@@ -227,6 +228,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.handle_export_csv(parsed)
         if path == '/api/admin/export-dtf-zip':
             return self.handle_export_dtf_zip(parsed)
+        if path == '/api/admin/batches':
+            return self.handle_list_batches()
         if path == '/api/public/top-voting':
             return self.handle_top_voting()
         if path.startswith('/api/public/qr/'):
@@ -290,6 +293,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.handle_admin_create()
         if path == '/api/admin/bulk-create':
             return self.handle_bulk_create()
+        if path == '/api/admin/delete-batch':
+            return self.handle_delete_batch()
         if path == '/twilio/voice':
             return self.handle_twilio_voice()
         if path.startswith('/api/admin/qr/') and path.endswith('/settings'):
@@ -401,6 +406,7 @@ class Handler(BaseHTTPRequestHandler):
                 },
                 'qrStylePreset': row['qr_style_preset'] or 'aurora',
                 'centerIcon': row['center_icon'] or '',
+                'batchLabel': row['batch_label'] or '',
                 'productTemplates': product_templates,
                 'scanCount': row['scan_count'] or 0,
                 'likeCount': row['like_count'] or 0,
@@ -448,10 +454,21 @@ class Handler(BaseHTTPRequestHandler):
 
         models = body.get('models')
         if isinstance(models, list) and models:
-            # Multi-model mode: validate every model against the
-            # server-renderable presets (only these can be exported as
-            # print-ready DTF SVGs).
-            valid_models = [m for m in models if isinstance(m, str) and m in qr_style.ALL_PRESETS]
+            # De-duplicate while preserving order first — repeating a model
+            # name in the input (e.g. a copy-paste mistake in the prompt)
+            # must NOT multiply how many codes that model gets. Without
+            # this, ["mono","mono","whiteOnBlack"] would silently create
+            # 2x as many "mono" codes as "whiteOnBlack" ones.
+            seen = set()
+            deduped = []
+            for m in models:
+                if isinstance(m, str) and m not in seen:
+                    seen.add(m)
+                    deduped.append(m)
+            duplicates_removed = len(models) - len(deduped)
+
+            valid_models = [m for m in deduped if m in qr_style.ALL_PRESETS]
+            invalid_models = [m for m in deduped if m not in qr_style.ALL_PRESETS]
             if not valid_models:
                 return json_response(
                     self,
@@ -467,9 +484,11 @@ class Handler(BaseHTTPRequestHandler):
 
             conn = db()
             created = []
+            counts_by_model = {}
             for model in valid_models:
+                made_for_model = 0
                 for i in range(per_model):
-                    for _attempt in range(5):
+                    for _attempt in range(8):
                         slug = random_slug()
                         edit_code = random_code()
                         try:
@@ -479,14 +498,30 @@ class Handler(BaseHTTPRequestHandler):
                                 (slug, edit_code, f'{title_prefix} {model} {i + 1}', batch_label, model),
                             )
                             created.append({'slug': slug, 'editCode': edit_code, 'qrStylePreset': model})
+                            made_for_model += 1
                             break
                         except sqlite3.IntegrityError:
                             continue
+                    else:
+                        # All retry attempts collided — surface this loudly
+                        # instead of silently shipping fewer codes than
+                        # requested for this model with no indication why.
+                        conn.rollback()
+                        conn.close()
+                        return json_response(self, {
+                            'ok': False,
+                            'error': f'Could not generate a unique code for model "{model}" '
+                                     f'(item {i + 1}/{per_model}) after 8 attempts. No codes from '
+                                     f'this request were saved — try again.',
+                        }, status=500)
+                counts_by_model[model] = made_for_model
             conn.commit()
             conn.close()
             json_response(self, {
                 'ok': True, 'created': len(created), 'batchLabel': batch_label,
-                'models': valid_models, 'perModel': per_model, 'items': created,
+                'models': valid_models, 'invalidModels': invalid_models,
+                'duplicatesRemoved': duplicates_removed, 'perModel': per_model,
+                'countsByModel': counts_by_model, 'items': created,
             })
             return
 
@@ -518,7 +553,62 @@ class Handler(BaseHTTPRequestHandler):
         conn.close()
         json_response(self, {'ok': True, 'created': len(created), 'batchLabel': batch_label, 'items': created})
 
-    def handle_export_csv(self, parsed):
+    def handle_list_batches(self):
+        """List every distinct batch label with its code count, the set of
+        models in it, and the most recent creation timestamp — sorted
+        newest first, so the top row is always "the last batch generated".
+        Codes with no batch_label (created one at a time, not via bulk
+        generation) are excluded.
+        """
+        if not self.require_admin():
+            return
+        conn = db()
+        rows = conn.execute(
+            'SELECT batch_label, '
+            'COUNT(*) as count, '
+            'GROUP_CONCAT(DISTINCT qr_style_preset) as models, '
+            'MAX(created_at) as latest, '
+            'MIN(created_at) as earliest '
+            'FROM qr_codes '
+            'WHERE batch_label IS NOT NULL AND batch_label != "" '
+            'GROUP BY batch_label '
+            'ORDER BY latest DESC'
+        ).fetchall()
+        conn.close()
+        batches = [{
+            'batchLabel': row['batch_label'],
+            'count': row['count'],
+            'models': sorted(set((row['models'] or '').split(','))),
+            'latest': row['latest'],
+            'earliest': row['earliest'],
+        } for row in rows]
+        json_response(self, {'ok': True, 'batches': batches})
+
+    def handle_delete_batch(self):
+        """Permanently delete every code in a batch.
+
+        Body: {"batchLabel": "Campanie Mai"}  (exact match, case-sensitive)
+
+        This is destructive and irreversible — any printed garment whose
+        code falls in this batch stops working immediately (its scan_url
+        and edit_url both 404). Intended for cleaning up test batches or
+        botched production runs before they're handed to a print shop, not
+        for batches already in the field.
+        """
+        if not self.require_admin():
+            return
+        body = parse_body(self)
+        batch_label = (body.get('batchLabel') or '').strip()
+        if not batch_label:
+            return json_response(self, {'ok': False, 'error': 'batchLabel is required'}, status=400)
+        conn = db()
+        cur = conn.execute('DELETE FROM qr_codes WHERE batch_label = ?', (batch_label,))
+        deleted = cur.rowcount
+        conn.commit()
+        conn.close()
+        if deleted == 0:
+            return json_response(self, {'ok': False, 'error': f'No codes found in batch "{batch_label}"'}, status=404)
+        json_response(self, {'ok': True, 'deleted': deleted, 'batchLabel': batch_label})
         """Download a CSV register of all codes (optionally filtered by batch).
 
         Query: ?batch=<label>  (optional — omit for all codes)
@@ -567,7 +657,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def handle_export_dtf_zip(self, parsed):
-        """Download a ZIP of print-ready QR SVGs for a batch (or all).
+        """Download a ZIP of print-ready QR PNGs for a batch (or all).
 
         Query:
             ?batch=<label>      optional batch filter
@@ -576,15 +666,21 @@ class Handler(BaseHTTPRequestHandler):
                                  qr_style_preset, which is how multi-model
                                  batches from bulk-create come out correctly
                                  organized into one folder per model)
-            ?icon=<icon>        optional center icon override for all
             ?sizeMm=<float>     physical QR size in mm (default 170 = 17cm)
+            ?dpi=<int>          render resolution (default 300)
 
-        Each SVG is print-ready: real-world mm dimensions (so DTF software
-        opens it at the exact physical size, no manual scaling) plus the
-        code's edit/configuration code printed in a small label under the
-        QR for production QA. Files are grouped into one subfolder per
-        model (e.g. "instagramGlow/001-abc123.svg") and also numbered
-        globally to line up with the CSV register's `nr` column.
+        Each PNG has a FULLY TRANSPARENT background — only the QR's own
+        ink (modules + finder rings) is opaque — so DTF film only deposits
+        color where the design actually is, instead of printing a big solid
+        square. Physical size is embedded via the PNG's DPI metadata, so
+        any RIP/design software opens it at the correct real-world size
+        with no manual scaling. Files are grouped into one subfolder per
+        model (e.g. "instagramGlow/001-abc123.png") and numbered to line up
+        with the CSV register's `nr` column.
+
+        Note: center-brand-icon overlays (Facebook/Instagram/TikTok) aren't
+        supported in this raster path yet — codes with an icon set still
+        export, just without the icon drawn on top.
         """
         if not self.require_admin():
             return
@@ -593,24 +689,27 @@ class Handler(BaseHTTPRequestHandler):
         # Empty string means "use each code's own preset" — only force a
         # single style across the whole batch if explicitly requested.
         forced_preset = (params.get('preset', [''])[0] or '').strip()
-        icon = (params.get('icon', [''])[0] or '').strip().lower()
-        icon = icon if icon in {'facebook', 'instagram', 'tiktok'} else None
         try:
             size_mm = float(params.get('sizeMm', ['170'])[0])
         except (TypeError, ValueError):
             size_mm = 170.0
         size_mm = max(20.0, min(size_mm, 1000.0))
+        try:
+            dpi = int(params.get('dpi', ['300'])[0])
+        except (TypeError, ValueError):
+            dpi = 300
+        dpi = max(72, min(dpi, 600))
 
         conn = db()
         if batch:
             rows = conn.execute(
-                'SELECT slug, edit_code, qr_style_preset, center_icon FROM qr_codes '
+                'SELECT slug, edit_code, qr_style_preset FROM qr_codes '
                 'WHERE batch_label = ? ORDER BY qr_style_preset, id',
                 (batch,),
             ).fetchall()
         else:
             rows = conn.execute(
-                'SELECT slug, edit_code, qr_style_preset, center_icon FROM qr_codes '
+                'SELECT slug, edit_code, qr_style_preset FROM qr_codes '
                 'ORDER BY qr_style_preset, id'
             ).fetchall()
         conn.close()
@@ -618,29 +717,24 @@ class Handler(BaseHTTPRequestHandler):
         zip_buf = io.BytesIO()
         per_model_counter = {}
         with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
-            for idx, row in enumerate(rows, start=1):
+            for row in rows:
                 scan_url = f'{BASE_URL}/c/{row["slug"]}'
                 use_preset = forced_preset or row['qr_style_preset'] or 'whiteOnBlack'
                 if use_preset not in qr_style.ALL_PRESETS:
                     use_preset = 'whiteOnBlack'
-                use_icon = icon if icon is not None else (
-                    (row['center_icon'] or '').strip().lower() or None
-                )
-                if use_icon not in {'facebook', 'instagram', 'tiktok'}:
-                    use_icon = None
                 try:
-                    svg = qr_style.build_print_ready_svg(
+                    png_bytes = qr_raster.build_print_ready_png(
                         scan_url,
                         preset=use_preset,
-                        center_icon=use_icon,
                         edit_code=row['edit_code'],
                         qr_size_mm=size_mm,
+                        dpi=dpi,
                     )
                 except Exception:
                     continue
                 per_model_counter[use_preset] = per_model_counter.get(use_preset, 0) + 1
                 model_idx = per_model_counter[use_preset]
-                zf.writestr(f'{use_preset}/{model_idx:03d}-{row["slug"]}.svg', svg)
+                zf.writestr(f'{use_preset}/{model_idx:03d}-{row["slug"]}.png', png_bytes)
         data = zip_buf.getvalue()
 
         self.send_response(200)
