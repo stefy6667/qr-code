@@ -199,6 +199,142 @@ function openBulkCreateModal() {
   });
 }
 
+function relativeTimeRo(sqliteTimestamp) {
+  // SQLite CURRENT_TIMESTAMP is UTC, formatted "YYYY-MM-DD HH:MM:SS".
+  const then = new Date(sqliteTimestamp.replace(' ', 'T') + 'Z');
+  const diffSec = Math.round((Date.now() - then.getTime()) / 1000);
+  if (diffSec < 60) return 'chiar acum';
+  const diffMin = Math.round(diffSec / 60);
+  if (diffMin < 60) return `acum ${diffMin} min`;
+  const diffH = Math.round(diffMin / 60);
+  if (diffH < 24) return `acum ${diffH} ${diffH === 1 ? 'oră' : 'ore'}`;
+  const diffD = Math.round(diffH / 24);
+  return `acum ${diffD} ${diffD === 1 ? 'zi' : 'zile'}`;
+}
+
+/**
+ * Shared delete flow (triple confirmation) — used by the standalone
+ * "Șterge lot" button AND by the "Șterge" action on each row in the
+ * "Vezi loturi" modal, so the same safety checks apply everywhere.
+ * Top-level (not nested in renderAdmin) so both call sites can reach it.
+ */
+async function confirmAndDeleteBatch(trimmed, knownCount = null) {
+  const count = knownCount ?? state.items.filter((item) => item.batchLabel === trimmed).length;
+  if (count === 0) {
+    alert(`Nu am găsit niciun cod în lotul "${trimmed}".`);
+    return false;
+  }
+  const warning = `Vei șterge PERMANENT ${count} coduri din lotul "${trimmed}".\n\nDacă vreo haină cu aceste coduri e deja imprimată sau vândută, codul ei va înceta să funcționeze imediat (404).\n\nAceastă acțiune NU poate fi anulată.`;
+  if (!window.confirm(warning)) return false;
+  const retype = window.prompt(`Pentru confirmare finală, scrie din nou numele lotului ("${trimmed}"):`, '');
+  if (retype !== trimmed) {
+    alert('Numele nu corespunde — ștergerea a fost anulată.');
+    return false;
+  }
+  try {
+    const res = await api('/api/admin/delete-batch', {
+      method: 'POST',
+      body: JSON.stringify({ batchLabel: trimmed }),
+    });
+    alert(`Am șters ${res.deleted} coduri din lotul "${res.batchLabel}".`);
+    return true;
+  } catch (error) {
+    alert('Ștergerea lotului a eșuat.');
+    return false;
+  }
+}
+
+/**
+ * Modal listing every production batch, newest first, with quick actions
+ * (Export CSV / Export DTF / Șterge) per row — answers "what's my last
+ * batch called?" at a glance instead of having to remember it.
+ */
+async function openBatchesModal() {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = html`
+    <div class="modal-box">
+      <h3>Loturile tale</h3>
+      <p class="modal-sub">Cel mai recent generat apare primul.</p>
+      <div id="batchesListContainer"><p class="modal-sub">Se încarcă...</p></div>
+      <div class="modal-actions">
+        <button type="button" class="secondary" id="batchesCloseBtn">Închide</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  const cleanup = () => document.body.removeChild(overlay);
+  overlay.querySelector('#batchesCloseBtn').onclick = cleanup;
+  overlay.onclick = (e) => { if (e.target === overlay) cleanup(); };
+
+  const container = overlay.querySelector('#batchesListContainer');
+  try {
+    const res = await api('/api/admin/batches');
+    const batches = res.batches || [];
+    if (batches.length === 0) {
+      container.innerHTML = '<p class="modal-sub">Niciun lot generat încă.</p>';
+      return;
+    }
+    container.innerHTML = html`
+      <table class="batches-table">
+        <thead>
+          <tr><th>Lot</th><th>Coduri</th><th>Modele</th><th>Creat</th><th></th></tr>
+        </thead>
+        <tbody>
+          ${batches.map((b, i) => html`
+            <tr class="${i === 0 ? 'batches-row-latest' : ''}">
+              <td>${escapeHtml(b.batchLabel)}${i === 0 ? ' <span class="batches-latest-tag">cel mai recent</span>' : ''}</td>
+              <td>${b.count}</td>
+              <td class="batches-models">${b.models.map(escapeHtml).join(', ')}</td>
+              <td>${relativeTimeRo(b.latest)}</td>
+              <td class="batches-row-actions">
+                <button type="button" class="batches-mini-btn" data-action="csv" data-batch="${escapeAttribute(b.batchLabel)}">CSV</button>
+                <button type="button" class="batches-mini-btn" data-action="dtf" data-batch="${escapeAttribute(b.batchLabel)}">DTF</button>
+                <button type="button" class="batches-mini-btn batches-mini-danger" data-action="del" data-batch="${escapeAttribute(b.batchLabel)}" data-count="${b.count}">Șterge</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `;
+    container.querySelectorAll('.batches-mini-btn').forEach((btn) => {
+      btn.onclick = async () => {
+        const action = btn.dataset.action;
+        const batch = btn.dataset.batch;
+        if (action === 'csv') {
+          const a = document.createElement('a');
+          a.href = `/api/admin/export-csv?batch=${encodeURIComponent(batch)}`;
+          a.download = '';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        } else if (action === 'dtf') {
+          const a = document.createElement('a');
+          a.href = `/api/admin/export-dtf-zip?batch=${encodeURIComponent(batch)}`;
+          a.download = '';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        } else if (action === 'del') {
+          const count = parseInt(btn.dataset.count, 10);
+          btn.textContent = '...';
+          btn.disabled = true;
+          const ok = await confirmAndDeleteBatch(batch, count);
+          if (ok) {
+            cleanup();
+            route();
+          } else {
+            btn.textContent = 'Șterge';
+            btn.disabled = false;
+          }
+        }
+      };
+    });
+  } catch (error) {
+    container.innerHTML = '<p class="modal-sub">Nu am putut încărca loturile.</p>';
+  }
+}
+
 function html(strings, ...values) {
   return strings.reduce((acc, str, i) => acc + str + (values[i] ?? ''), '');
 }
@@ -311,6 +447,7 @@ async function renderAdmin() {
             <button class="secondary" id="bulkCreateBtn">Generează lot</button>
             <button class="secondary" id="exportCsvBtn">Export CSV</button>
             <button class="secondary" id="exportDtfBtn">Export DTF (ZIP)</button>
+            <button class="secondary" id="viewBatchesBtn">Vezi loturi</button>
             <button class="danger" id="deleteBatchBtn">Șterge lot</button>
             <button class="secondary" id="logoutBtn">Logout</button>
           </div>
@@ -456,37 +593,23 @@ async function renderAdmin() {
     a.click();
     document.body.removeChild(a);
   };
+  document.getElementById('viewBatchesBtn').onclick = () => {
+    openBatchesModal();
+  };
   document.getElementById('deleteBatchBtn').onclick = async () => {
     const batch = window.prompt('Ce lot vrei să ștergi? (numele exact, sensibil la majuscule)', '');
     if (batch === null || !batch.trim()) return;
     const trimmed = batch.trim();
-    const count = state.items.filter((item) => item.batchLabel === trimmed).length;
-    if (count === 0) {
-      alert(`Nu am găsit niciun cod în lotul "${trimmed}".`);
-      return;
-    }
-    const warning = `Vei șterge PERMANENT ${count} coduri din lotul "${trimmed}".\n\nDacă vreo haină cu aceste coduri e deja imprimată sau vândută, codul ei va înceta să funcționeze imediat (404).\n\nAceastă acțiune NU poate fi anulată.`;
-    if (!window.confirm(warning)) return;
-    const retype = window.prompt(`Pentru confirmare finală, scrie din nou numele lotului ("${trimmed}"):`, '');
-    if (retype !== trimmed) {
-      alert('Numele nu corespunde — ștergerea a fost anulată.');
-      return;
-    }
     const btn = document.getElementById('deleteBatchBtn');
     btn.textContent = 'Șterg...';
     btn.disabled = true;
     try {
-      const res = await api('/api/admin/delete-batch', {
-        method: 'POST',
-        body: JSON.stringify({ batchLabel: trimmed }),
-      });
-      alert(`Am șters ${res.deleted} coduri din lotul "${res.batchLabel}".`);
-      route();
-    } catch (error) {
-      alert('Ștergerea lotului a eșuat.');
+      const ok = await confirmAndDeleteBatch(trimmed);
+      if (ok) route();
     } finally {
       btn.textContent = 'Șterge lot';
       btn.disabled = false;
+
     }
   };
   document.getElementById('logoutBtn').onclick = async () => {
