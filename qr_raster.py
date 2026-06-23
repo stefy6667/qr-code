@@ -22,7 +22,34 @@ from __future__ import annotations
 
 import io
 import os
+import subprocess
+import sys
 from functools import lru_cache
+
+
+def _ensure_installed(import_name: str, pip_name: str = None) -> None:
+    """Self-healing dependency check: if `import_name` isn't importable,
+    install it via pip right now instead of crashing.
+
+    Why this exists: this app's Render deploy has a custom Build Command
+    that (for reasons outside this code's control — a dashboard setting,
+    not anything in the repo) sometimes skips `pip install -r
+    requirements.txt` entirely. The previous dependency (segno) never
+    exposed this because it's vendored as plain Python source directly in
+    the repo. numpy/Pillow ship compiled C extensions and can't be vendored
+    that way, so if the build step didn't install them, we install them
+    here at first import instead of crash-looping forever.
+    """
+    try:
+        __import__(import_name)
+        return
+    except ImportError:
+        pass
+    subprocess.check_call([sys.executable, '-m', 'pip', 'install', '--quiet', pip_name or import_name])
+
+
+_ensure_installed('numpy')
+_ensure_installed('PIL', 'Pillow')
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
