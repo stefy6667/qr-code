@@ -279,6 +279,14 @@ GENERIC_PRESETS = {
         'fill': '#2f2f2f',
         'background': '#ffffff',
     },
+    'monoSquare': {
+        # Same color as 'mono', but radius=0 — sharp classic squares instead
+        # of the heavily-rounded blob look, for anyone who wants something
+        # that reads as a "standard" QR code at a glance.
+        'radius': 0.0,
+        'fill': '#2f2f2f',
+        'background': '#ffffff',
+    },
     'sunset': {
         'radius': 0.45,
         'fill': {'type': 'linear-gradient', 'position': [0, 0, 1, 1],

@@ -330,29 +330,19 @@ def build_print_ready_png(
     data: str,
     preset: str = 'whiteOnBlack',
     edit_code: str = '',
-    qr_size_mm: float = 170.0,
-    dpi: int = 300,
-    label_gap_mm: float = 6.0,
-    label_height_mm: float = 22.0,
+    size_px: int = 643,
     center_icon: str = None,  # accepted for API symmetry; not yet rendered in raster mode
 ) -> bytes:
-    """Render a print-ready, TRANSPARENT-background PNG for DTF: only the
-    QR's own ink (modules + finder rings, no surrounding solid square) plus
-    a small white label with the edit/configuration code underneath.
-
-    Physical size is embedded via the PNG's DPI metadata: at `dpi` dots per
-    inch, `qr_size_mm` millimeters maps to an exact pixel count, so any RIP
-    or design software that reads DPI shows the correct real-world size with
-    no manual scaling.
+    """Render a print-ready, TRANSPARENT-background PNG for DTF: an exact
+    `size_px` x `size_px` square containing only the QR's own ink (modules +
+    finder rings, no surrounding solid color block) plus the edit code as
+    small, discreet text — just large enough to read the code, not a big
+    label box. The code sits inside the QR's own transparent quiet-zone
+    margin at the bottom, so the canvas never grows past size_px x size_px.
     """
     import segno
 
-    mm_to_px = dpi / 25.4
-    qr_px = round(qr_size_mm * mm_to_px)
-    label_gap_px = round(label_gap_mm * mm_to_px)
-    label_h_px = round(label_height_mm * mm_to_px)
-    canvas_w = qr_px
-    canvas_h = qr_px + label_gap_px + label_h_px
+    qr_px = size_px
 
     if preset in PRESETS:
         cfg = PRESETS[preset]
@@ -364,7 +354,7 @@ def build_print_ready_png(
         module_size = qr_px / (n + quiet * 2)
         mask = _build_mask_server(matrix, n, quiet, module_size, qr_px, cfg)
         fill_rgb = _cached_server_fill_array(preset, qr_px)
-        ink = _compose_ink_layer_from_rgb(mask, fill_rgb, qr_px)
+        canvas = _compose_ink_layer_from_rgb(mask, fill_rgb, qr_px)
     elif preset in GENERIC_PRESETS:
         cfg = GENERIC_PRESETS[preset]
         qr = segno.make(data, error='h', boost_error=False)
@@ -374,32 +364,35 @@ def build_print_ready_png(
         module_size = qr_px / (n + quiet * 2)
         mask = _build_mask_generic(matrix, n, quiet, module_size, qr_px, cfg.get('radius', 0))
         fill_rgb = _cached_generic_fill_array(preset, qr_px)
-        ink = _compose_ink_layer_from_rgb(mask, fill_rgb, qr_px)
+        canvas = _compose_ink_layer_from_rgb(mask, fill_rgb, qr_px)
     else:
         raise ValueError(f'Unknown preset: {preset}')
-
-    canvas = Image.new('RGBA', (canvas_w, canvas_h), (0, 0, 0, 0))
-    canvas.paste(ink, (0, 0), ink)
 
     code = (edit_code or '').strip()
     if code:
         draw = ImageDraw.Draw(canvas)
-        label_w = min(canvas_w * 0.92, 140 * mm_to_px)
-        label_x = (canvas_w - label_w) / 2
-        label_y = qr_px + label_gap_px
-        radius = label_h_px * 0.22
-        draw.rounded_rectangle(
-            [label_x, label_y, label_x + label_w, label_y + label_h_px],
-            radius=radius, fill=(255, 255, 255, 255), outline=(10, 10, 10, 255), width=max(1, round(0.4 * mm_to_px)),
-        )
-        font_size = round(label_h_px * 0.46)
+        quiet_margin_px = quiet * module_size
+        # Small font that comfortably fits the bottom quiet-zone strip —
+        # this is meant to be just legible, not a prominent UI element.
+        font_size = max(9, min(15, round(quiet_margin_px * 0.55)))
         font = ImageFont.truetype(FONT_PATH, font_size)
         text_w = draw.textlength(code, font=font)
+        pad_x, pad_y = 4, 2
+        box_w = text_w + pad_x * 2
+        box_h = font_size + pad_y * 2
+        box_x = (qr_px - box_w) / 2
+        box_y = qr_px - quiet_margin_px / 2 - box_h / 2
+        # Small tight-fitting backing (not a big pill) so the code stays
+        # legible regardless of what's behind the transparent PNG.
+        draw.rounded_rectangle(
+            [box_x, box_y, box_x + box_w, box_y + box_h],
+            radius=3, fill=(255, 255, 255, 235),
+        )
         draw.text(
-            (canvas_w / 2 - text_w / 2, label_y + label_h_px * 0.22),
+            (qr_px / 2 - text_w / 2, box_y + pad_y),
             code, font=font, fill=(10, 10, 10, 255),
         )
 
     buf = io.BytesIO()
-    canvas.save(buf, format='PNG', dpi=(dpi, dpi), compress_level=1)
+    canvas.save(buf, format='PNG', compress_level=1)
     return buf.getvalue()

@@ -10,6 +10,7 @@ import secrets
 import sqlite3
 import sys
 import zipfile
+from datetime import datetime
 from typing import Optional
 from http import HTTPStatus
 from http.cookies import SimpleCookie
@@ -22,6 +23,13 @@ import qr_raster
 import postcard
 
 ROOT = Path(__file__).resolve().parent
+
+# Sentinel batch label used to refer to codes that have NO batch_label set
+# (bulk-created without a name, or single one-off codes). Lets the
+# batches-list/delete/export endpoints address that group explicitly,
+# without risking an accidental match-everything bug from treating a plain
+# empty string as "no filter".
+NO_BATCH_SENTINEL = '__no_batch__'
 DATA_ROOT = Path(os.environ.get('DATA_ROOT', str(ROOT / 'data'))).resolve()
 UPLOAD_DIR = Path(os.environ.get('UPLOAD_DIR', str(DATA_ROOT / 'uploads'))).resolve()
 PUBLIC_DIR = ROOT / 'public'
@@ -449,7 +457,12 @@ class Handler(BaseHTTPRequestHandler):
         if not self.require_admin():
             return
         body = parse_body(self)
-        batch_label = (body.get('batchLabel') or '').strip() or None
+        batch_label = (body.get('batchLabel') or '').strip()
+        if not batch_label:
+            # Never store a NULL/empty batch_label — codes with no name end
+            # up impossible to find or delete as a group later. Auto-name
+            # using the creation timestamp instead.
+            batch_label = f'Lot-{datetime.now().strftime("%Y%m%d-%H%M%S")}'
         title_prefix = (body.get('titlePrefix') or 'Cod QR').strip() or 'Cod QR'
 
         models = body.get('models')
@@ -557,8 +570,11 @@ class Handler(BaseHTTPRequestHandler):
         """List every distinct batch label with its code count, the set of
         models in it, and the most recent creation timestamp — sorted
         newest first, so the top row is always "the last batch generated".
-        Codes with no batch_label (created one at a time, not via bulk
-        generation) are excluded.
+
+        Codes with no batch_label set (orphaned — e.g. created before this
+        column existed, or via an old client that didn't send one) are
+        grouped under NO_BATCH_SENTINEL instead of being silently excluded,
+        so they stay reachable for export/deletion.
         """
         if not self.require_admin():
             return
@@ -574,6 +590,14 @@ class Handler(BaseHTTPRequestHandler):
             'GROUP BY batch_label '
             'ORDER BY latest DESC'
         ).fetchall()
+        orphan = conn.execute(
+            'SELECT COUNT(*) as count, '
+            'GROUP_CONCAT(DISTINCT qr_style_preset) as models, '
+            'MAX(created_at) as latest, '
+            'MIN(created_at) as earliest '
+            'FROM qr_codes '
+            "WHERE batch_label IS NULL OR batch_label = ''"
+        ).fetchone()
         conn.close()
         batches = [{
             'batchLabel': row['batch_label'],
@@ -582,12 +606,23 @@ class Handler(BaseHTTPRequestHandler):
             'latest': row['latest'],
             'earliest': row['earliest'],
         } for row in rows]
+        if orphan and orphan['count']:
+            batches.append({
+                'batchLabel': NO_BATCH_SENTINEL,
+                'count': orphan['count'],
+                'models': sorted(set((orphan['models'] or '').split(','))),
+                'latest': orphan['latest'],
+                'earliest': orphan['earliest'],
+            })
+        batches.sort(key=lambda b: b['latest'], reverse=True)
         json_response(self, {'ok': True, 'batches': batches})
 
     def handle_delete_batch(self):
         """Permanently delete every code in a batch.
 
         Body: {"batchLabel": "Campanie Mai"}  (exact match, case-sensitive)
+        — or NO_BATCH_SENTINEL to delete codes that were created with no
+        batch name at all (otherwise unreachable/undeletable as a group).
 
         This is destructive and irreversible — any printed garment whose
         code falls in this batch stops working immediately (its scan_url
@@ -598,27 +633,38 @@ class Handler(BaseHTTPRequestHandler):
         if not self.require_admin():
             return
         body = parse_body(self)
-        batch_label = (body.get('batchLabel') or '').strip()
-        if not batch_label:
+        raw = (body.get('batchLabel') or '').strip()
+        if not raw:
             return json_response(self, {'ok': False, 'error': 'batchLabel is required'}, status=400)
         conn = db()
-        cur = conn.execute('DELETE FROM qr_codes WHERE batch_label = ?', (batch_label,))
+        if raw == NO_BATCH_SENTINEL:
+            cur = conn.execute("DELETE FROM qr_codes WHERE batch_label IS NULL OR batch_label = ''")
+        else:
+            cur = conn.execute('DELETE FROM qr_codes WHERE batch_label = ?', (raw,))
         deleted = cur.rowcount
         conn.commit()
         conn.close()
         if deleted == 0:
-            return json_response(self, {'ok': False, 'error': f'No codes found in batch "{batch_label}"'}, status=404)
-        json_response(self, {'ok': True, 'deleted': deleted, 'batchLabel': batch_label})
+            return json_response(self, {'ok': False, 'error': f'No codes found in batch "{raw}"'}, status=404)
+        json_response(self, {'ok': True, 'deleted': deleted, 'batchLabel': raw})
+
+    def handle_export_csv(self, parsed):
         """Download a CSV register of all codes (optionally filtered by batch).
 
-        Query: ?batch=<label>  (optional — omit for all codes)
+        Query: ?batch=<label>  (optional — omit for all codes; pass
+        NO_BATCH_SENTINEL to export only the no-batch-name group)
         """
         if not self.require_admin():
             return
         params = parse_qs(parsed.query)
         batch = (params.get('batch', [''])[0] or '').strip()
         conn = db()
-        if batch:
+        if batch == NO_BATCH_SENTINEL:
+            rows = conn.execute(
+                'SELECT id, slug, edit_code, title, batch_label, qr_style_preset, created_at, scan_count '
+                "FROM qr_codes WHERE batch_label IS NULL OR batch_label = '' ORDER BY qr_style_preset, id"
+            ).fetchall()
+        elif batch:
             rows = conn.execute(
                 'SELECT id, slug, edit_code, title, batch_label, qr_style_preset, created_at, scan_count '
                 'FROM qr_codes WHERE batch_label = ? ORDER BY qr_style_preset, id',
@@ -666,17 +712,18 @@ class Handler(BaseHTTPRequestHandler):
                                  qr_style_preset, which is how multi-model
                                  batches from bulk-create come out correctly
                                  organized into one folder per model)
-            ?sizeMm=<float>     physical QR size in mm (default 170 = 17cm)
-            ?dpi=<int>          render resolution (default 300)
+            ?sizePx=<int>       exact output size in pixels, square
+                                 (default 643 → 643x643)
 
         Each PNG has a FULLY TRANSPARENT background — only the QR's own
         ink (modules + finder rings) is opaque — so DTF film only deposits
         color where the design actually is, instead of printing a big solid
-        square. Physical size is embedded via the PNG's DPI metadata, so
-        any RIP/design software opens it at the correct real-world size
-        with no manual scaling. Files are grouped into one subfolder per
-        model (e.g. "instagramGlow/001-abc123.png") and numbered to line up
-        with the CSV register's `nr` column.
+        square. The edit/configuration code is drawn small and discreet,
+        inside the QR's own transparent margin, just legible enough to
+        confirm which code/password a file corresponds to — not a big
+        label. Files are grouped into one subfolder per model (e.g.
+        "instagramGlow/001-abc123.png") and numbered to line up with the
+        CSV register's `nr` column.
 
         Note: center-brand-icon overlays (Facebook/Instagram/TikTok) aren't
         supported in this raster path yet — codes with an icon set still
@@ -690,18 +737,18 @@ class Handler(BaseHTTPRequestHandler):
         # single style across the whole batch if explicitly requested.
         forced_preset = (params.get('preset', [''])[0] or '').strip()
         try:
-            size_mm = float(params.get('sizeMm', ['170'])[0])
+            size_px = int(params.get('sizePx', ['643'])[0])
         except (TypeError, ValueError):
-            size_mm = 170.0
-        size_mm = max(20.0, min(size_mm, 1000.0))
-        try:
-            dpi = int(params.get('dpi', ['300'])[0])
-        except (TypeError, ValueError):
-            dpi = 300
-        dpi = max(72, min(dpi, 600))
+            size_px = 643
+        size_px = max(100, min(size_px, 4000))
 
         conn = db()
-        if batch:
+        if batch == NO_BATCH_SENTINEL:
+            rows = conn.execute(
+                'SELECT slug, edit_code, qr_style_preset FROM qr_codes '
+                "WHERE batch_label IS NULL OR batch_label = '' ORDER BY qr_style_preset, id"
+            ).fetchall()
+        elif batch:
             rows = conn.execute(
                 'SELECT slug, edit_code, qr_style_preset FROM qr_codes '
                 'WHERE batch_label = ? ORDER BY qr_style_preset, id',
@@ -727,8 +774,7 @@ class Handler(BaseHTTPRequestHandler):
                         scan_url,
                         preset=use_preset,
                         edit_code=row['edit_code'],
-                        qr_size_mm=size_mm,
-                        dpi=dpi,
+                        size_px=size_px,
                     )
                 except Exception:
                     continue
