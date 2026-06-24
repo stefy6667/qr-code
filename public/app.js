@@ -61,6 +61,12 @@ const qrStylePresets = {
     fill: '#2f2f2f',
     background: '#ffffff'
   },
+  monoSquare: {
+    label: 'Mono Clasic',
+    radius: 0,
+    fill: '#2f2f2f',
+    background: '#ffffff'
+  },
   sunset: {
     label: 'Sunset Neon',
     radius: 0.45,
@@ -283,7 +289,7 @@ async function openBatchesModal() {
         <tbody>
           ${batches.map((b, i) => html`
             <tr class="${i === 0 ? 'batches-row-latest' : ''}">
-              <td>${escapeHtml(b.batchLabel)}${i === 0 ? ' <span class="batches-latest-tag">cel mai recent</span>' : ''}</td>
+              <td>${b.batchLabel === '__no_batch__' ? '<em>(fără nume)</em>' : escapeHtml(b.batchLabel)}${i === 0 ? ' <span class="batches-latest-tag">cel mai recent</span>' : ''}</td>
               <td>${b.count}</td>
               <td class="batches-models">${b.models.map(escapeHtml).join(', ')}</td>
               <td>${relativeTimeRo(b.latest)}</td>
@@ -577,15 +583,15 @@ async function renderAdmin() {
   document.getElementById('exportDtfBtn').onclick = () => {
     const batch = window.prompt('Export QR-uri DTF pentru ce lot? (lasă gol pentru TOATE)', '');
     if (batch === null) return;
-    const sizeStr = window.prompt('Dimensiune fizică a fiecărui QR (mm, implicit 170 = 17cm):', '170');
+    const sizeStr = window.prompt('Dimensiune imagine (pixeli, pătrat — implicit 643 = 643x643):', '643');
     if (sizeStr === null) return;
-    const sizeMm = parseFloat(sizeStr) || 170;
+    const sizePx = parseInt(sizeStr, 10) || 643;
     // No preset prompt: each code keeps its own assigned model (set at
     // bulk-create time), so the ZIP comes out pre-sorted into one folder
     // per model automatically.
     const params = new URLSearchParams();
     if (batch.trim()) params.set('batch', batch.trim());
-    params.set('sizeMm', String(sizeMm));
+    params.set('sizePx', String(sizePx));
     const a = document.createElement('a');
     a.href = `/api/admin/export-dtf-zip?${params.toString()}`;
     a.download = '';
