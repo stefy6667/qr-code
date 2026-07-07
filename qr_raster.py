@@ -180,7 +180,7 @@ def _module_polygon(x, y, w, h, r, nw, ne, se, sw, n_arc=5):
 # Mask builders — one per rendering engine, mirroring qr_style.py exactly
 # ---------------------------------------------------------------------------
 
-def _build_mask_generic(matrix, n, quiet, module_size, size_px, radius_factor, supersample=1):
+def _build_mask_generic(matrix, n, quiet, module_size, size_px, radius_factor, supersample=4):
     """Mask for the 7 `qr-creator`-replica presets: every dark module gets
     per-corner rounding based on neighbor adjacency, finder patterns get NO
     special treatment (same loop as everything else)."""
@@ -214,7 +214,7 @@ def _build_mask_generic(matrix, n, quiet, module_size, size_px, radius_factor, s
     return mask
 
 
-def _build_mask_server(matrix, n, quiet, module_size, size_px, cfg, supersample=1):
+def _build_mask_server(matrix, n, quiet, module_size, size_px, cfg, supersample=4):
     """Mask for the 3 original server presets: data modules are either
     'classic_pixels' (sharp squares only) or square-when-connected /
     circle-when-isolated, PLUS the 3 finder patterns get a distinct
