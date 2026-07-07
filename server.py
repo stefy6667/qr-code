@@ -448,7 +448,7 @@ class Handler(BaseHTTPRequestHandler):
           - Multi-model: {"models": ["instagramGlow", "whiteOnBlack"],
             "perModel": 15, "batchLabel": "...", "titlePrefix": "..."}
             creates `perModel` codes for EACH model listed, each one tagged
-            with that model as its qr_style_preset — e.g. 3 models x 15 =
+            with that model as its qr_style_preset -- e.g. 3 models x 15 =
             45 codes total. This is the production-batch mode used for DTF
             print runs across several QR designs at once.
 
@@ -459,7 +459,7 @@ class Handler(BaseHTTPRequestHandler):
         body = parse_body(self)
         batch_label = (body.get('batchLabel') or '').strip()
         if not batch_label:
-            # Never store a NULL/empty batch_label — codes with no name end
+            # Never store a NULL/empty batch_label -- codes with no name end
             # up impossible to find or delete as a group later. Auto-name
             # using the creation timestamp instead.
             batch_label = f'Lot-{datetime.now().strftime("%Y%m%d-%H%M%S")}'
@@ -467,7 +467,7 @@ class Handler(BaseHTTPRequestHandler):
 
         models = body.get('models')
         if isinstance(models, list) and models:
-            # De-duplicate while preserving order first — repeating a model
+            # De-duplicate while preserving order first -- repeating a model
             # name in the input (e.g. a copy-paste mistake in the prompt)
             # must NOT multiply how many codes that model gets. Without
             # this, ["mono","mono","whiteOnBlack"] would silently create
@@ -516,7 +516,7 @@ class Handler(BaseHTTPRequestHandler):
                         except sqlite3.IntegrityError:
                             continue
                     else:
-                        # All retry attempts collided — surface this loudly
+                        # All retry attempts collided -- surface this loudly
                         # instead of silently shipping fewer codes than
                         # requested for this model with no indication why.
                         conn.rollback()
@@ -525,7 +525,7 @@ class Handler(BaseHTTPRequestHandler):
                             'ok': False,
                             'error': f'Could not generate a unique code for model "{model}" '
                                      f'(item {i + 1}/{per_model}) after 8 attempts. No codes from '
-                                     f'this request were saved — try again.',
+                                     f'this request were saved -- try again.',
                         }, status=500)
                 counts_by_model[model] = made_for_model
             conn.commit()
@@ -568,10 +568,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def handle_list_batches(self):
         """List every distinct batch label with its code count, the set of
-        models in it, and the most recent creation timestamp — sorted
+        models in it, and the most recent creation timestamp -- sorted
         newest first, so the top row is always "the last batch generated".
 
-        Codes with no batch_label set (orphaned — e.g. created before this
+        Codes with no batch_label set (orphaned -- e.g. created before this
         column existed, or via an old client that didn't send one) are
         grouped under NO_BATCH_SENTINEL instead of being silently excluded,
         so they stay reachable for export/deletion.
@@ -621,10 +621,10 @@ class Handler(BaseHTTPRequestHandler):
         """Permanently delete every code in a batch.
 
         Body: {"batchLabel": "Campanie Mai"}  (exact match, case-sensitive)
-        — or NO_BATCH_SENTINEL to delete codes that were created with no
+        -- or NO_BATCH_SENTINEL to delete codes that were created with no
         batch name at all (otherwise unreachable/undeletable as a group).
 
-        This is destructive and irreversible — any printed garment whose
+        This is destructive and irreversible -- any printed garment whose
         code falls in this batch stops working immediately (its scan_url
         and edit_url both 404). Intended for cleaning up test batches or
         botched production runs before they're handed to a print shop, not
@@ -651,7 +651,7 @@ class Handler(BaseHTTPRequestHandler):
     def handle_export_csv(self, parsed):
         """Download a CSV register of all codes (optionally filtered by batch).
 
-        Query: ?batch=<label>  (optional — omit for all codes; pass
+        Query: ?batch=<label>  (optional -- omit for all codes; pass
         NO_BATCH_SENTINEL to export only the no-batch-name group)
         """
         if not self.require_admin():
@@ -707,22 +707,17 @@ class Handler(BaseHTTPRequestHandler):
 
         Query:
             ?batch=<label>      optional batch filter
-            ?preset=<preset>    force one style for ALL codes (optional —
+            ?preset=<preset>    force one style for ALL codes (optional --
                                  by default each code uses its own assigned
-                                 qr_style_preset, which is how multi-model
-                                 batches from bulk-create come out correctly
-                                 organized into one folder per model)
-            ?sizeMm=<float>     physical size in mm (default 170 = 17cm × 17cm)
-                                 rendered at 300 DPI — no need to specify DPI
-
-        Each PNG has a FULLY TRANSPARENT background at exactly 300 DPI.
-        The DPI value is embedded in the PNG metadata so design software
-        and RIP printers open it at the correct physical size automatically.
+                                 qr_style_preset)
+            ?sizeMm=<float>     physical size in mm (default 170 = 17cm x 17cm)
+                                 rendered at 300 DPI
+        """
         if not self.require_admin():
             return
         params = parse_qs(parsed.query)
         batch = (params.get('batch', [''])[0] or '').strip()
-        # Empty string means "use each code's own preset" — only force a
+        # Empty string means "use each code's own preset" -- only force a
         # single style across the whole batch if explicitly requested.
         forced_preset = (params.get('preset', [''])[0] or '').strip()
         try:
@@ -865,7 +860,7 @@ class Handler(BaseHTTPRequestHandler):
             )
         except Exception as e:
             return self.send_error(500, f'Postcard generation failed: {e}')
-        # Inline SVG download — filename hint via Content-Disposition.
+        # Inline SVG download -- filename hint via Content-Disposition.
         data = svg.encode('utf-8')
         self.send_response(200)
         self.send_header('Content-Type', 'image/svg+xml; charset=utf-8')
@@ -877,7 +872,7 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def handle_qr_svg_for_slug(self, slug, parsed):
-        """/qr/<slug>.svg — encodes the public scan URL, uses preset from DB."""
+        """/qr/<slug>.svg - encodes the public scan URL, uses preset from DB."""
         conn = db()
         row = conn.execute(
             'SELECT slug, qr_style_preset, center_icon FROM qr_codes WHERE slug = ?',
