@@ -583,15 +583,9 @@ async function renderAdmin() {
   document.getElementById('exportDtfBtn').onclick = () => {
     const batch = window.prompt('Export QR-uri DTF pentru ce lot? (lasă gol pentru TOATE)', '');
     if (batch === null) return;
-    const sizeStr = window.prompt('Dimensiune QR în mm (la 300 DPI — implicit 170 = 17cm × 17cm):', '170');
-    if (sizeStr === null) return;
-    const sizeMm = parseFloat(sizeStr) || 170;
-    // No preset prompt: each code keeps its own assigned model (set at
-    // bulk-create time), so the ZIP comes out pre-sorted into one folder
-    // per model automatically.
+    // Size is fixed: 170mm × 170mm at 300 DPI (2008 × 2008px).
     const params = new URLSearchParams();
     if (batch.trim()) params.set('batch', batch.trim());
-    params.set('sizeMm', String(sizeMm));
     const a = document.createElement('a');
     a.href = `/api/admin/export-dtf-zip?${params.toString()}`;
     a.download = '';
