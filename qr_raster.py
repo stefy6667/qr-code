@@ -330,23 +330,29 @@ def build_print_ready_png(
     data: str,
     preset: str = 'whiteOnBlack',
     edit_code: str = '',
-    size_px: int = 643,
+    qr_size_mm: float = 170.0,
+    dpi: int = 300,
     center_icon: str = None,  # accepted for API symmetry; not yet rendered in raster mode
 ) -> bytes:
-    """Render a print-ready, TRANSPARENT-background PNG for DTF: an exact
-    `size_px` x `size_px` square containing only the QR's own ink (modules +
-    finder rings, no surrounding solid color block) plus the edit code as
-    small, discreet text — just large enough to read the code, not a big
-    label box. The code sits inside the QR's own transparent quiet-zone
-    margin at the bottom, so the canvas never grows past size_px x size_px.
+    """Render a print-ready, TRANSPARENT-background PNG for DTF.
+
+    Physical size is set in millimeters at a given DPI:
+        - default: 170mm × 170mm at 300 DPI = 2008 × 2008 pixels
+    The DPI value is embedded in the PNG metadata so that design software
+    and RIP printers open the file at the correct real-world size without
+    any manual scaling.
+
+    The edit code is drawn as small, discreet text inside the QR's own
+    transparent quiet-zone margin — just legible enough to confirm which
+    password a file has, without being a prominent visual element.
     """
     import segno
 
-    qr_px = size_px
+    qr_px = round(qr_size_mm * dpi / 25.4)
 
     if preset in PRESETS:
         cfg = PRESETS[preset]
-        ec_level = 'l'  # no-icon path; icon not supported in raster mode yet
+        ec_level = 'l'
         qr = segno.make(data, error=ec_level, boost_error=False)
         matrix = qr.matrix
         n = len(matrix)
@@ -372,9 +378,7 @@ def build_print_ready_png(
     if code:
         draw = ImageDraw.Draw(canvas)
         quiet_margin_px = quiet * module_size
-        # Small font that comfortably fits the bottom quiet-zone strip —
-        # this is meant to be just legible, not a prominent UI element.
-        font_size = max(9, min(15, round(quiet_margin_px * 0.55)))
+        font_size = max(9, min(20, round(quiet_margin_px * 0.55)))
         font = ImageFont.truetype(FONT_PATH, font_size)
         text_w = draw.textlength(code, font=font)
         pad_x, pad_y = 4, 2
@@ -382,8 +386,6 @@ def build_print_ready_png(
         box_h = font_size + pad_y * 2
         box_x = (qr_px - box_w) / 2
         box_y = qr_px - quiet_margin_px / 2 - box_h / 2
-        # Small tight-fitting backing (not a big pill) so the code stays
-        # legible regardless of what's behind the transparent PNG.
         draw.rounded_rectangle(
             [box_x, box_y, box_x + box_w, box_y + box_h],
             radius=3, fill=(255, 255, 255, 235),
@@ -394,5 +396,5 @@ def build_print_ready_png(
         )
 
     buf = io.BytesIO()
-    canvas.save(buf, format='PNG', compress_level=1)
+    canvas.save(buf, format='PNG', dpi=(dpi, dpi), compress_level=1)
     return buf.getvalue()

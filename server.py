@@ -712,23 +712,12 @@ class Handler(BaseHTTPRequestHandler):
                                  qr_style_preset, which is how multi-model
                                  batches from bulk-create come out correctly
                                  organized into one folder per model)
-            ?sizePx=<int>       exact output size in pixels, square
-                                 (default 643 → 643x643)
+            ?sizeMm=<float>     physical size in mm (default 170 = 17cm × 17cm)
+                                 rendered at 300 DPI — no need to specify DPI
 
-        Each PNG has a FULLY TRANSPARENT background — only the QR's own
-        ink (modules + finder rings) is opaque — so DTF film only deposits
-        color where the design actually is, instead of printing a big solid
-        square. The edit/configuration code is drawn small and discreet,
-        inside the QR's own transparent margin, just legible enough to
-        confirm which code/password a file corresponds to — not a big
-        label. Files are grouped into one subfolder per model (e.g.
-        "instagramGlow/001-abc123.png") and numbered to line up with the
-        CSV register's `nr` column.
-
-        Note: center-brand-icon overlays (Facebook/Instagram/TikTok) aren't
-        supported in this raster path yet — codes with an icon set still
-        export, just without the icon drawn on top.
-        """
+        Each PNG has a FULLY TRANSPARENT background at exactly 300 DPI.
+        The DPI value is embedded in the PNG metadata so design software
+        and RIP printers open it at the correct physical size automatically.
         if not self.require_admin():
             return
         params = parse_qs(parsed.query)
@@ -737,10 +726,10 @@ class Handler(BaseHTTPRequestHandler):
         # single style across the whole batch if explicitly requested.
         forced_preset = (params.get('preset', [''])[0] or '').strip()
         try:
-            size_px = int(params.get('sizePx', ['643'])[0])
+            size_mm = float(params.get('sizeMm', ['170'])[0])
         except (TypeError, ValueError):
-            size_px = 643
-        size_px = max(100, min(size_px, 4000))
+            size_mm = 170.0
+        size_mm = max(10.0, min(size_mm, 500.0))
 
         conn = db()
         if batch == NO_BATCH_SENTINEL:
@@ -774,7 +763,8 @@ class Handler(BaseHTTPRequestHandler):
                         scan_url,
                         preset=use_preset,
                         edit_code=row['edit_code'],
-                        size_px=size_px,
+                        qr_size_mm=size_mm,
+                        dpi=300,
                     )
                 except Exception:
                     continue
