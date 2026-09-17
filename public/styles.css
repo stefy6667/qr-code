@@ -54,7 +54,7 @@ input, textarea, select {
   color: var(--text);
   padding: 14px 16px;
 }
-textarea { min-height: 120px; resize: vertical; }
+textarea { min-height: 180px; resize: vertical; field-sizing: content; }
 button {
   border: 0;
   border-radius: 4px;

@@ -1837,3 +1837,24 @@ function escapeAttribute(value) {
 }
 
 route();
+
+// Auto-grow textareas: browsers that don't support field-sizing:content
+// get a JS fallback — each textarea expands to fit its content as the
+// user types, so there is never a visible hard limit on message length.
+function initAutoGrowTextareas(root = document) {
+  root.querySelectorAll('textarea').forEach((ta) => {
+    if (ta.dataset.autoGrow) return;
+    ta.dataset.autoGrow = '1';
+    const grow = () => {
+      ta.style.height = 'auto';
+      ta.style.height = `${Math.max(180, ta.scrollHeight)}px`;
+    };
+    ta.addEventListener('input', grow);
+    grow();
+  });
+}
+
+new MutationObserver(() => initAutoGrowTextareas()).observe(
+  document.body,
+  { childList: true, subtree: true }
+);
